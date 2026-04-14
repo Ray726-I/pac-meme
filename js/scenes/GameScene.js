@@ -4,9 +4,8 @@ class GameScene extends Phaser.Scene {
     this.tileSize = 40;
     this.gridWidth = 16;
     this.gridHeight = 16;
-    this.centerSnapThreshold = 1.1;
     this.basePlayerSpeed = 160;
-    this.baseHunterSpeed = 95;
+    this.baseHunterSpeed = 100;
   }
 
   init(data) {
@@ -15,12 +14,10 @@ class GameScene extends Phaser.Scene {
     this.highScore = data.highScore || this.readHighScore();
     this.lives = data.lives || 3;
 
-    this.currentDirection = { x: 0, y: 0 };
-    this.nextDirection = { x: 0, y: 0 };
-
     this.invulnerable = false;
     this.gameOver = false;
     this.transitioning = false;
+    this.nextDirection = { x: 0, y: 0 };
   }
 
   create() {
@@ -46,26 +43,19 @@ class GameScene extends Phaser.Scene {
       "################",
     ];
 
-    this.walls = this.physics.add.staticGroup();
-    this.pellets = this.physics.add.staticGroup();
-    this.playerSpawn = { x: 0, y: 0 };
-    this.hunterSpawns = [];
+    this.pelletByCell = new Map();
+    this.playerSpawnCell = { x: 7, y: 7 };
+    this.hunterSpawnCells = [];
 
     this.buildLevel();
     this.createActors();
     this.createHud();
 
-    this.physics.add.collider(this.player, this.walls);
-
-    for (const hunter of this.hunters) {
-      this.physics.add.collider(hunter.sprite, this.walls);
-      this.physics.add.overlap(this.player, hunter.sprite, this.handlePlayerCaught, null, this);
-    }
-
-    this.physics.add.overlap(this.player, this.pellets, this.handlePellet, null, this);
+    // Remove pellet under the player at start
+    this.collectPelletAt(this.playerAgent.cellX, this.playerAgent.cellY);
   }
 
-  update(time) {
+  update(time, delta) {
     if (this.gameOver) {
       if (Phaser.Input.Keyboard.JustDown(this.restartKey)) {
         this.scene.restart({ level: 1, score: 0, highScore: this.highScore, lives: 3 });
@@ -73,64 +63,83 @@ class GameScene extends Phaser.Scene {
       return;
     }
 
-    if (this.transitioning) {
-      return;
-    }
+    if (this.transitioning) return;
 
-    this.updatePlayerDirection();
-    this.updatePlayerMovement();
-    this.updateHuntersMovement(time);
+    this.readPlayerInput();
+    this.movePlayer(delta);
+    this.moveHunters(delta, time);
+    this.checkHunterContact();
   }
 
+  /* ------------------------------------------------------------------ */
+  /*  Level building                                                     */
+  /* ------------------------------------------------------------------ */
+
   buildLevel() {
-    for (let row = 0; row < this.gridHeight; row += 1) {
-      for (let col = 0; col < this.gridWidth; col += 1) {
+    for (let row = 0; row < this.gridHeight; row++) {
+      for (let col = 0; col < this.gridWidth; col++) {
         const cell = this.levelLayout[row][col];
-        const worldX = this.gridToWorld(col);
-        const worldY = this.gridToWorld(row);
+        const wx = this.gridToWorld(col);
+        const wy = this.gridToWorld(row);
 
         if (cell === "#") {
-          this.walls.create(worldX, worldY, "wall");
+          this.add.image(wx, wy, "wall").setDepth(1);
         } else if (cell === ".") {
-          this.pellets.create(worldX, worldY, "pellet");
+          const pellet = this.add.image(wx, wy, "pellet").setDepth(2);
+          this.pelletByCell.set(`${col},${row}`, pellet);
         } else if (cell === "P") {
-          this.playerSpawn = { x: worldX, y: worldY };
+          this.playerSpawnCell = { x: col, y: row };
         } else if (cell === "H" || cell === "K") {
-          this.hunterSpawns.push({ x: worldX, y: worldY });
+          this.hunterSpawnCells.push({ x: col, y: row });
         }
       }
     }
 
-    if (this.hunterSpawns.length === 0) {
-      this.hunterSpawns.push({ x: this.gridToWorld(8), y: this.gridToWorld(14) });
+    if (this.hunterSpawnCells.length === 0) {
+      this.hunterSpawnCells.push({ x: 8, y: 14 });
     }
   }
 
+  /* ------------------------------------------------------------------ */
+  /*  Actor creation                                                     */
+  /* ------------------------------------------------------------------ */
+
   createActors() {
-    this.player = this.physics.add.sprite(this.playerSpawn.x, this.playerSpawn.y, "player");
-    this.player.setCollideWorldBounds(true);
-    this.player.setDepth(2);
-    this.player.body.setSize(22, 22);
+    const px = this.gridToWorld(this.playerSpawnCell.x);
+    const py = this.gridToWorld(this.playerSpawnCell.y);
 
-    this.hunters = this.hunterSpawns.map((spawn, index) => {
-      const sprite = this.physics.add.sprite(spawn.x, spawn.y, "hunter");
-      sprite.setCollideWorldBounds(true);
-      sprite.setDepth(2);
-      sprite.body.setSize(22, 22);
+    this.playerAgent = {
+      sprite: this.add.sprite(px, py, "player").setDepth(4),
+      cellX: this.playerSpawnCell.x,
+      cellY: this.playerSpawnCell.y,
+      direction: { x: 0, y: 0 },
+      moving: false,
+      speed: this.basePlayerSpeed,
+    };
 
-      if (index === 1) {
-        sprite.setTint(0xfb923c);
-      }
+    this.hunters = this.hunterSpawnCells.map((spawn, i) => {
+      const sx = this.gridToWorld(spawn.x);
+      const sy = this.gridToWorld(spawn.y);
+      const sprite = this.add.sprite(sx, sy, "hunter").setDepth(4);
+      if (i === 1) sprite.setTint(0xfb923c);
 
       return {
         sprite,
-        spawn: { ...spawn },
+        cellX: spawn.x,
+        cellY: spawn.y,
+        spawnCellX: spawn.x,
+        spawnCellY: spawn.y,
         direction: { x: 0, y: 0 },
-        nextThinkAt: 0,
-        baseSpeed: this.baseHunterSpeed + index * 8,
+        moving: false,
+        speed: this.baseHunterSpeed + i * 8,
+        decisionAt: 0,
       };
     });
   }
+
+  /* ------------------------------------------------------------------ */
+  /*  HUD                                                                */
+  /* ------------------------------------------------------------------ */
 
   createHud() {
     this.hudStyle = {
@@ -141,9 +150,9 @@ class GameScene extends Phaser.Scene {
       strokeThickness: 4,
     };
 
-    this.scoreText = this.add.text(10, 8, "", this.hudStyle).setDepth(5);
-    this.levelText = this.add.text(10, 32, "", this.hudStyle).setDepth(5);
-    this.livesText = this.add.text(10, 56, "", this.hudStyle).setDepth(5);
+    this.scoreText = this.add.text(10, 8, "", this.hudStyle).setDepth(6);
+    this.levelText = this.add.text(10, 32, "", this.hudStyle).setDepth(6);
+    this.livesText = this.add.text(10, 56, "", this.hudStyle).setDepth(6);
 
     this.noticeText = this.add
       .text(this.scale.width / 2, this.scale.height / 2, "", {
@@ -153,129 +162,195 @@ class GameScene extends Phaser.Scene {
         stroke: "#020617",
         strokeThickness: 6,
       })
-      .setDepth(6)
+      .setDepth(7)
       .setOrigin(0.5)
       .setVisible(false);
 
     this.refreshHud();
   }
 
-  updatePlayerDirection() {
-    if (this.cursors.left.isDown) {
-      this.nextDirection = { x: -1, y: 0 };
-    } else if (this.cursors.right.isDown) {
-      this.nextDirection = { x: 1, y: 0 };
-    } else if (this.cursors.up.isDown) {
-      this.nextDirection = { x: 0, y: -1 };
-    } else if (this.cursors.down.isDown) {
-      this.nextDirection = { x: 0, y: 1 };
+  /* ------------------------------------------------------------------ */
+  /*  Input                                                              */
+  /* ------------------------------------------------------------------ */
+
+  readPlayerInput() {
+    if (this.cursors.left.isDown) this.nextDirection = { x: -1, y: 0 };
+    else if (this.cursors.right.isDown) this.nextDirection = { x: 1, y: 0 };
+    else if (this.cursors.up.isDown) this.nextDirection = { x: 0, y: -1 };
+    else if (this.cursors.down.isDown) this.nextDirection = { x: 0, y: 1 };
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Player movement                                                    */
+  /* ------------------------------------------------------------------ */
+
+  movePlayer(delta) {
+    const agent = this.playerAgent;
+
+    // Allow instant 180° reversal while moving
+    if (agent.moving && (agent.direction.x !== 0 || agent.direction.y !== 0)) {
+      const reversing =
+        this.nextDirection.x === -agent.direction.x &&
+        this.nextDirection.y === -agent.direction.y;
+      if (reversing) {
+        agent.cellX += agent.direction.x;
+        agent.cellY += agent.direction.y;
+        agent.direction = { ...this.nextDirection };
+      }
+    }
+
+    // Advance towards target cell
+    if (agent.moving) {
+      this.advanceAgent(agent, delta);
+      if (!agent.moving) {
+        this.collectPelletAt(agent.cellX, agent.cellY);
+      }
+    }
+
+    // If stopped, decide next direction
+    if (!agent.moving) {
+      // Try buffered direction first
+      if (this.canMove(agent.cellX + this.nextDirection.x, agent.cellY + this.nextDirection.y)) {
+        agent.direction = { ...this.nextDirection };
+      }
+      // Validate current direction
+      if (!this.canMove(agent.cellX + agent.direction.x, agent.cellY + agent.direction.y)) {
+        agent.direction = { x: 0, y: 0 };
+      }
+      // Start moving if we have a valid direction
+      if (agent.direction.x !== 0 || agent.direction.y !== 0) {
+        agent.moving = true;
+      }
     }
   }
 
-  updatePlayerMovement() {
-    const playerCell = this.worldToGrid(this.player.x, this.player.y);
-    const atCenter = this.isAtCellCenter(this.player, playerCell);
+  /* ------------------------------------------------------------------ */
+  /*  Hunter movement                                                    */
+  /* ------------------------------------------------------------------ */
 
-    if (atCenter) {
-      this.snapToCellCenter(this.player, playerCell);
-
-      if (this.canMove(playerCell.x + this.nextDirection.x, playerCell.y + this.nextDirection.y)) {
-        this.currentDirection = { ...this.nextDirection };
-      }
-
-      if (!this.canMove(playerCell.x + this.currentDirection.x, playerCell.y + this.currentDirection.y)) {
-        this.currentDirection = { x: 0, y: 0 };
-      }
-    }
-
-    this.player.body.setVelocity(
-      this.currentDirection.x * this.basePlayerSpeed,
-      this.currentDirection.y * this.basePlayerSpeed
-    );
-  }
-
-  updateHuntersMovement(time) {
-    const playerCell = this.worldToGrid(this.player.x, this.player.y);
-
+  moveHunters(delta, time) {
     for (const hunter of this.hunters) {
-      const hunterCell = this.worldToGrid(hunter.sprite.x, hunter.sprite.y);
-      const atCenter = this.isAtCellCenter(hunter.sprite, hunterCell);
-      const needsDirection = hunter.direction.x === 0 && hunter.direction.y === 0;
-
-      if (atCenter || needsDirection) {
-        this.snapToCellCenter(hunter.sprite, hunterCell);
-
-        if (time >= hunter.nextThinkAt || needsDirection) {
-          const nextStep = this.findPathStep(hunterCell, playerCell);
+      // Decide direction when at a cell center (not moving)
+      if (!hunter.moving) {
+        if (time >= hunter.decisionAt) {
+          const start = { x: hunter.cellX, y: hunter.cellY };
+          const goal = { x: this.playerAgent.cellX, y: this.playerAgent.cellY };
+          const nextStep = this.findPathStep(start, goal);
 
           if (nextStep) {
             hunter.direction = {
-              x: nextStep.x - hunterCell.x,
-              y: nextStep.y - hunterCell.y,
+              x: nextStep.x - start.x,
+              y: nextStep.y - start.y,
             };
-          } else {
-            hunter.direction = this.pickRandomDirection(hunterCell, hunter.direction);
           }
 
-          hunter.nextThinkAt = time + Phaser.Math.Between(120, 210);
+          hunter.decisionAt = time + Phaser.Math.Between(120, 220);
         }
 
-        if (!this.canMove(hunterCell.x + hunter.direction.x, hunterCell.y + hunter.direction.y)) {
-          hunter.direction = this.pickRandomDirection(hunterCell, { x: 0, y: 0 });
+        // Validate / fallback
+        if (!this.canMove(hunter.cellX + hunter.direction.x, hunter.cellY + hunter.direction.y)) {
+          const dirs = [
+            { x: 1, y: 0 },
+            { x: -1, y: 0 },
+            { x: 0, y: 1 },
+            { x: 0, y: -1 },
+          ].filter((d) => this.canMove(hunter.cellX + d.x, hunter.cellY + d.y));
+
+          hunter.direction =
+            dirs.length > 0
+              ? Phaser.Utils.Array.GetRandom(dirs)
+              : { x: 0, y: 0 };
+        }
+
+        if (hunter.direction.x !== 0 || hunter.direction.y !== 0) {
+          hunter.moving = true;
         }
       }
 
-      const levelBoost = (this.level - 1) * 8;
-      const hunterSpeed = Phaser.Math.Clamp(hunter.baseSpeed + levelBoost, 95, 250);
-      hunter.sprite.body.setVelocity(hunter.direction.x * hunterSpeed, hunter.direction.y * hunterSpeed);
+      // Advance towards target cell
+      if (hunter.moving) {
+        const levelBoost = (this.level - 1) * 8;
+        const speed = Phaser.Math.Clamp(hunter.speed + levelBoost, 95, 250);
+        this.advanceAgent(hunter, delta, speed);
+      }
     }
   }
 
-  pickRandomDirection(cell, preferredDirection) {
-    const directions = [
-      { x: 1, y: 0 },
-      { x: -1, y: 0 },
-      { x: 0, y: 1 },
-      { x: 0, y: -1 },
-    ];
+  /* ------------------------------------------------------------------ */
+  /*  Shared movement helper – moves sprite towards the next cell        */
+  /* ------------------------------------------------------------------ */
 
-    const options = directions.filter((dir) => this.canMove(cell.x + dir.x, cell.y + dir.y));
+  advanceAgent(agent, delta, speedOverride) {
+    const speed = speedOverride || agent.speed;
+    const move = speed * (delta / 1000);
 
-    if (options.length === 0) {
-      return { x: 0, y: 0 };
-    }
+    const targetX = this.gridToWorld(agent.cellX + agent.direction.x);
+    const targetY = this.gridToWorld(agent.cellY + agent.direction.y);
 
-    if (preferredDirection.x !== 0 || preferredDirection.y !== 0) {
-      const keepCurrent = options.find(
-        (dir) => dir.x === preferredDirection.x && dir.y === preferredDirection.y
+    const dx = targetX - agent.sprite.x;
+    const dy = targetY - agent.sprite.y;
+    const dist = Math.abs(dx) + Math.abs(dy);
+
+    if (dist <= move + 0.1) {
+      // Arrived at next cell
+      agent.cellX += agent.direction.x;
+      agent.cellY += agent.direction.y;
+      agent.sprite.setPosition(
+        this.gridToWorld(agent.cellX),
+        this.gridToWorld(agent.cellY)
       );
-
-      if (keepCurrent && Math.random() < 0.6) {
-        return keepCurrent;
-      }
+      agent.moving = false;
+    } else {
+      // Keep moving towards target
+      agent.sprite.x += agent.direction.x * move;
+      agent.sprite.y += agent.direction.y * move;
     }
-
-    return Phaser.Utils.Array.GetRandom(options);
   }
 
-  handlePellet(player, pellet) {
-    if (!pellet.active || this.transitioning || this.gameOver) {
-      return;
-    }
+  /* ------------------------------------------------------------------ */
+  /*  Pellet collection                                                  */
+  /* ------------------------------------------------------------------ */
+
+  collectPelletAt(cx, cy) {
+    if (this.transitioning || this.gameOver) return;
+
+    const key = `${cx},${cy}`;
+    const pellet = this.pelletByCell.get(key);
+    if (!pellet || !pellet.active) return;
 
     pellet.destroy();
+    this.pelletByCell.delete(key);
     this.score += 10;
     this.refreshHud();
 
-    if (this.pellets.countActive(true) === 0) {
+    if (this.pelletByCell.size === 0) {
       this.levelComplete();
     }
   }
 
-  handlePlayerCaught() {
-    if (this.invulnerable || this.transitioning || this.gameOver) {
-      return;
+  /* ------------------------------------------------------------------ */
+  /*  Hunter-player collision                                            */
+  /* ------------------------------------------------------------------ */
+
+  checkHunterContact() {
+    if (this.invulnerable || this.transitioning || this.gameOver) return;
+
+    for (const hunter of this.hunters) {
+      const dist = Phaser.Math.Distance.Between(
+        this.playerAgent.sprite.x,
+        this.playerAgent.sprite.y,
+        hunter.sprite.x,
+        hunter.sprite.y
+      );
+      if (dist < this.tileSize * 0.55) {
+        this.handlePlayerCaught();
+        return;
+      }
     }
+  }
+
+  handlePlayerCaught() {
+    if (this.invulnerable || this.transitioning || this.gameOver) return;
 
     this.lives -= 1;
     this.refreshHud();
@@ -286,45 +361,52 @@ class GameScene extends Phaser.Scene {
     }
 
     this.invulnerable = true;
-    this.player.body.setVelocity(0, 0);
-    this.currentDirection = { x: 0, y: 0 };
     this.nextDirection = { x: 0, y: 0 };
-
-    this.player.setPosition(this.playerSpawn.x, this.playerSpawn.y);
+    this.resetPlayerToSpawn();
     this.resetHuntersToSpawn();
 
     this.tweens.add({
-      targets: this.player,
+      targets: this.playerAgent.sprite,
       alpha: 0.2,
       duration: 100,
       yoyo: true,
       repeat: 7,
       onComplete: () => {
-        this.player.setAlpha(1);
+        this.playerAgent.sprite.setAlpha(1);
         this.invulnerable = false;
       },
     });
   }
 
+  resetPlayerToSpawn() {
+    const a = this.playerAgent;
+    a.cellX = this.playerSpawnCell.x;
+    a.cellY = this.playerSpawnCell.y;
+    a.direction = { x: 0, y: 0 };
+    a.moving = false;
+    a.sprite.setPosition(this.gridToWorld(a.cellX), this.gridToWorld(a.cellY));
+  }
+
   resetHuntersToSpawn() {
-    for (const hunter of this.hunters) {
-      hunter.sprite.body.setVelocity(0, 0);
-      hunter.sprite.setPosition(hunter.spawn.x, hunter.spawn.y);
-      hunter.direction = { x: 0, y: 0 };
-      hunter.nextThinkAt = this.time.now + 150;
+    for (const h of this.hunters) {
+      h.cellX = h.spawnCellX;
+      h.cellY = h.spawnCellY;
+      h.direction = { x: 0, y: 0 };
+      h.moving = false;
+      h.decisionAt = this.time.now + 300;
+      h.sprite.setPosition(this.gridToWorld(h.cellX), this.gridToWorld(h.cellY));
     }
   }
 
+  /* ------------------------------------------------------------------ */
+  /*  Level / Game state                                                 */
+  /* ------------------------------------------------------------------ */
+
   levelComplete() {
-    if (this.transitioning || this.gameOver) {
-      return;
-    }
+    if (this.transitioning || this.gameOver) return;
 
     this.transitioning = true;
-    this.player.body.setVelocity(0, 0);
-    this.stopHunters();
-    this.currentDirection = { x: 0, y: 0 };
-
+    this.stopAllAgents();
     this.updateHighScore(this.score);
     this.showNotice(`Level ${this.level} Cleared`);
 
@@ -340,20 +422,19 @@ class GameScene extends Phaser.Scene {
 
   triggerGameOver() {
     this.gameOver = true;
-    this.player.body.setVelocity(0, 0);
-    this.stopHunters();
-
+    this.stopAllAgents();
     this.updateHighScore(this.score);
-    const centerX = this.scale.width / 2;
-    const centerY = this.scale.height / 2;
+
+    const cx = this.scale.width / 2;
+    const cy = this.scale.height / 2;
 
     this.add
-      .rectangle(centerX, centerY, 420, 220, 0x020617, 0.88)
+      .rectangle(cx, cy, 420, 220, 0x020617, 0.88)
       .setStrokeStyle(2, 0x38bdf8, 0.9)
       .setDepth(8);
 
     this.add
-      .text(centerX, centerY - 70, "Game Over", {
+      .text(cx, cy - 70, "Game Over", {
         fontFamily: "Trebuchet MS",
         fontSize: "40px",
         color: "#f8fafc",
@@ -362,7 +443,7 @@ class GameScene extends Phaser.Scene {
       .setDepth(9);
 
     this.add
-      .text(centerX, centerY - 12, `Score: ${this.score}`, {
+      .text(cx, cy - 12, `Score: ${this.score}`, {
         fontFamily: "Trebuchet MS",
         fontSize: "24px",
         color: "#e2e8f0",
@@ -371,7 +452,7 @@ class GameScene extends Phaser.Scene {
       .setDepth(9);
 
     this.add
-      .text(centerX, centerY + 22, `High Score: ${this.highScore}`, {
+      .text(cx, cy + 22, `High Score: ${this.highScore}`, {
         fontFamily: "Trebuchet MS",
         fontSize: "22px",
         color: "#bae6fd",
@@ -380,7 +461,7 @@ class GameScene extends Phaser.Scene {
       .setDepth(9);
 
     this.add
-      .text(centerX, centerY + 66, "Press SPACE to restart", {
+      .text(cx, cy + 66, "Press SPACE to restart", {
         fontFamily: "Trebuchet MS",
         fontSize: "18px",
         color: "#f8fafc",
@@ -389,12 +470,22 @@ class GameScene extends Phaser.Scene {
       .setDepth(9);
   }
 
-  stopHunters() {
-    for (const hunter of this.hunters) {
-      hunter.sprite.body.setVelocity(0, 0);
-      hunter.direction = { x: 0, y: 0 };
+  stopAllAgents() {
+    const a = this.playerAgent;
+    a.direction = { x: 0, y: 0 };
+    a.moving = false;
+    a.sprite.setPosition(this.gridToWorld(a.cellX), this.gridToWorld(a.cellY));
+
+    for (const h of this.hunters) {
+      h.direction = { x: 0, y: 0 };
+      h.moving = false;
+      h.sprite.setPosition(this.gridToWorld(h.cellX), this.gridToWorld(h.cellY));
     }
   }
+
+  /* ------------------------------------------------------------------ */
+  /*  Utility                                                            */
+  /* ------------------------------------------------------------------ */
 
   showNotice(message) {
     this.noticeText.setText(message);
@@ -406,9 +497,7 @@ class GameScene extends Phaser.Scene {
       alpha: 0,
       duration: 1000,
       delay: 250,
-      onComplete: () => {
-        this.noticeText.setVisible(false);
-      },
+      onComplete: () => this.noticeText.setVisible(false),
     });
   }
 
@@ -416,40 +505,17 @@ class GameScene extends Phaser.Scene {
     return cell * this.tileSize + this.tileSize / 2;
   }
 
-  worldToGrid(worldX, worldY) {
-    return {
-      x: Phaser.Math.Clamp(Math.floor(worldX / this.tileSize), 0, this.gridWidth - 1),
-      y: Phaser.Math.Clamp(Math.floor(worldY / this.tileSize), 0, this.gridHeight - 1),
-    };
-  }
-
-  isAtCellCenter(sprite, cell) {
-    const centerX = this.gridToWorld(cell.x);
-    const centerY = this.gridToWorld(cell.y);
-    return (
-      Math.abs(sprite.x - centerX) <= this.centerSnapThreshold &&
-      Math.abs(sprite.y - centerY) <= this.centerSnapThreshold
-    );
-  }
-
-  snapToCellCenter(sprite, cell) {
-    sprite.setPosition(this.gridToWorld(cell.x), this.gridToWorld(cell.y));
-  }
-
   canMove(cellX, cellY) {
     if (cellX < 0 || cellY < 0 || cellX >= this.gridWidth || cellY >= this.gridHeight) {
       return false;
     }
-
     return this.levelLayout[cellY][cellX] !== "#";
   }
 
   findPathStep(start, goal) {
-    if (start.x === goal.x && start.y === goal.y) {
-      return null;
-    }
+    if (start.x === goal.x && start.y === goal.y) return null;
 
-    const queue = [start];
+    const queue = [{ x: start.x, y: start.y }];
     const visited = new Set([`${start.x},${start.y}`]);
     const cameFrom = new Map();
     const directions = [
@@ -461,36 +527,26 @@ class GameScene extends Phaser.Scene {
 
     while (queue.length > 0) {
       const current = queue.shift();
-
-      if (!current) {
-        break;
-      }
-
-      if (current.x === goal.x && current.y === goal.y) {
-        break;
-      }
+      if (!current) break;
+      if (current.x === goal.x && current.y === goal.y) break;
 
       for (const dir of directions) {
-        const nextX = current.x + dir.x;
-        const nextY = current.y + dir.y;
-        const nextKey = `${nextX},${nextY}`;
+        const nx = current.x + dir.x;
+        const ny = current.y + dir.y;
+        const nk = `${nx},${ny}`;
 
-        if (visited.has(nextKey) || !this.canMove(nextX, nextY)) {
-          continue;
-        }
+        if (visited.has(nk) || !this.canMove(nx, ny)) continue;
 
-        visited.add(nextKey);
-        cameFrom.set(nextKey, current);
-        queue.push({ x: nextX, y: nextY });
+        visited.add(nk);
+        cameFrom.set(nk, { x: current.x, y: current.y });
+        queue.push({ x: nx, y: ny });
       }
     }
 
     const goalKey = `${goal.x},${goal.y}`;
-    if (!cameFrom.has(goalKey)) {
-      return null;
-    }
+    if (!cameFrom.has(goalKey)) return null;
 
-    let step = { ...goal };
+    let step = { x: goal.x, y: goal.y };
     let prev = cameFrom.get(`${step.x},${step.y}`);
 
     while (prev && !(prev.x === start.x && prev.y === start.y)) {
@@ -516,12 +572,9 @@ class GameScene extends Phaser.Scene {
   }
 
   updateHighScore(nextScore) {
-    if (nextScore <= this.highScore) {
-      return;
-    }
+    if (nextScore <= this.highScore) return;
 
     this.highScore = nextScore;
-
     try {
       window.localStorage.setItem("pacMemeHighScore", String(this.highScore));
     } catch (error) {
