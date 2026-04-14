@@ -2,7 +2,7 @@ class GameScene extends Phaser.Scene {
   constructor() {
     super("GameScene");
     this.tileSize = 40;
-    this.gridWidth = 16;
+    this.gridWidth = 32;
     this.gridHeight = 16;
     this.basePlayerSpeed = 160;
     this.baseHunterSpeed = 100;
@@ -25,22 +25,22 @@ class GameScene extends Phaser.Scene {
     this.restartKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
     this.levelLayout = [
-      "################",
-      "#..K...##......#",
-      "#.####.##.####.#",
-      "#.#....##....#.#",
-      "#.#.##.##.##.#.#",
-      "#....#....#....#",
-      "####.#.##.#.####",
-      "#......P.......#",
-      "#.####.##.####.#",
-      "#.#....##....#.#",
-      "#.#.##.##.##.#.#",
-      "#....#....#....#",
-      "####.#.##.#.####",
-      "#......##......#",
-      "#.####..H.####.#",
-      "################",
+      "################################",
+      "#..K..............##.......K..#",
+      "#.####.####.####.##.####.####.#",
+      "#.#....#...#.#...#.#...#.#...#.#",
+      "#.#.##.#.#.#.#.#.#.#.#.#.#.#.#.#",
+      "#....#...#....#.......#....#...#",
+      "####.###.#######.###.###.###.##",
+      "#......P.......##......P.......#",
+      "#.####.##.####.##.####.##.####.#",
+      "#.#....##....#.##.#....##....#.#",
+      "#.#.##.##.##.#.##.#.##.##.##.#.#",
+      "#....#....#....##....#....#....#",
+      "####.#.##.#.########.#.##.#.####",
+      "#......##......##......##......#",
+      "#.####..H.####.##.####..H.####.#",
+      "################################",
     ];
 
     this.pelletByCell = new Map();
@@ -121,7 +121,7 @@ class GameScene extends Phaser.Scene {
       const sx = this.gridToWorld(spawn.x);
       const sy = this.gridToWorld(spawn.y);
       const sprite = this.add.sprite(sx, sy, "hunter").setDepth(4);
-      if (i === 1) sprite.setTint(0xfb923c);
+      sprite.setScale(0.08);
 
       return {
         sprite,
@@ -187,7 +187,7 @@ class GameScene extends Phaser.Scene {
   movePlayer(delta) {
     const agent = this.playerAgent;
 
-    // Allow instant 180° reversal while moving
+    // Allow instant 180 reversal while moving
     if (agent.moving && (agent.direction.x !== 0 || agent.direction.y !== 0)) {
       const reversing =
         this.nextDirection.x === -agent.direction.x &&
@@ -229,25 +229,23 @@ class GameScene extends Phaser.Scene {
   /* ------------------------------------------------------------------ */
 
   moveHunters(delta, time) {
+    // Get all spawn cells to avoid targeting unreachable hunters
+    const spawns = this.hunterSpawnCells;
+
     for (const hunter of this.hunters) {
       // Decide direction when at a cell center (not moving)
       if (!hunter.moving) {
-        if (time >= hunter.decisionAt) {
-          const start = { x: hunter.cellX, y: hunter.cellY };
-          const goal = { x: this.playerAgent.cellX, y: this.playerAgent.cellY };
-          const nextStep = this.findPathStep(start, goal);
-
-          if (nextStep) {
-            hunter.direction = {
-              x: nextStep.x - start.x,
-              y: nextStep.y - start.y,
-            };
-          }
-
-          hunter.decisionAt = time + Phaser.Math.Between(120, 220);
+        // Always try to get a direction if we don't have one
+        if (hunter.direction.x === 0 && hunter.direction.y === 0) {
+          this.chooseHunterDirection(hunter, time);
         }
 
-        // Validate / fallback
+        // Also periodically re-evaluate
+        if (time >= hunter.decisionAt) {
+          this.chooseHunterDirection(hunter, time);
+        }
+
+        // Validate / fallback if chosen direction is blocked
         if (!this.canMove(hunter.cellX + hunter.direction.x, hunter.cellY + hunter.direction.y)) {
           const dirs = [
             { x: 1, y: 0 },
@@ -274,6 +272,22 @@ class GameScene extends Phaser.Scene {
         this.advanceAgent(hunter, delta, speed);
       }
     }
+  }
+
+  chooseHunterDirection(hunter, time) {
+    // Find path to player
+    const start = { x: hunter.cellX, y: hunter.cellY };
+    const goal = { x: this.playerAgent.cellX, y: this.playerAgent.cellY };
+    const nextStep = this.findPathStep(start, goal);
+
+    if (nextStep) {
+      hunter.direction = {
+        x: nextStep.x - start.x,
+        y: nextStep.y - start.y,
+      };
+    }
+
+    hunter.decisionAt = time + Phaser.Math.Between(200, 400);
   }
 
   /* ------------------------------------------------------------------ */
@@ -399,7 +413,7 @@ class GameScene extends Phaser.Scene {
   }
 
   /* ------------------------------------------------------------------ */
-  /*  Level / Game state                                                 */
+  /*  Level flow                                                         */
   /* ------------------------------------------------------------------ */
 
   levelComplete() {
@@ -407,6 +421,7 @@ class GameScene extends Phaser.Scene {
 
     this.transitioning = true;
     this.stopAllAgents();
+
     this.updateHighScore(this.score);
     this.showNotice(`Level ${this.level} Cleared`);
 
@@ -423,18 +438,18 @@ class GameScene extends Phaser.Scene {
   triggerGameOver() {
     this.gameOver = true;
     this.stopAllAgents();
-    this.updateHighScore(this.score);
 
-    const cx = this.scale.width / 2;
-    const cy = this.scale.height / 2;
+    this.updateHighScore(this.score);
+    const centerX = this.scale.width / 2;
+    const centerY = this.scale.height / 2;
 
     this.add
-      .rectangle(cx, cy, 420, 220, 0x020617, 0.88)
+      .rectangle(centerX, centerY, 420, 220, 0x020617, 0.88)
       .setStrokeStyle(2, 0x38bdf8, 0.9)
       .setDepth(8);
 
     this.add
-      .text(cx, cy - 70, "Game Over", {
+      .text(centerX, centerY - 70, "Game Over", {
         fontFamily: "Trebuchet MS",
         fontSize: "40px",
         color: "#f8fafc",
@@ -443,7 +458,7 @@ class GameScene extends Phaser.Scene {
       .setDepth(9);
 
     this.add
-      .text(cx, cy - 12, `Score: ${this.score}`, {
+      .text(centerX, centerY - 12, `Score: ${this.score}`, {
         fontFamily: "Trebuchet MS",
         fontSize: "24px",
         color: "#e2e8f0",
@@ -452,7 +467,7 @@ class GameScene extends Phaser.Scene {
       .setDepth(9);
 
     this.add
-      .text(cx, cy + 22, `High Score: ${this.highScore}`, {
+      .text(centerX, centerY + 22, `High Score: ${this.highScore}`, {
         fontFamily: "Trebuchet MS",
         fontSize: "22px",
         color: "#bae6fd",
@@ -461,7 +476,7 @@ class GameScene extends Phaser.Scene {
       .setDepth(9);
 
     this.add
-      .text(cx, cy + 66, "Press SPACE to restart", {
+      .text(centerX, centerY + 66, "Press SPACE to restart", {
         fontFamily: "Trebuchet MS",
         fontSize: "18px",
         color: "#f8fafc",
@@ -471,21 +486,14 @@ class GameScene extends Phaser.Scene {
   }
 
   stopAllAgents() {
-    const a = this.playerAgent;
-    a.direction = { x: 0, y: 0 };
-    a.moving = false;
-    a.sprite.setPosition(this.gridToWorld(a.cellX), this.gridToWorld(a.cellY));
+    this.playerAgent.direction = { x: 0, y: 0 };
+    this.playerAgent.moving = false;
 
-    for (const h of this.hunters) {
-      h.direction = { x: 0, y: 0 };
-      h.moving = false;
-      h.sprite.setPosition(this.gridToWorld(h.cellX), this.gridToWorld(h.cellY));
+    for (const hunter of this.hunters) {
+      hunter.direction = { x: 0, y: 0 };
+      hunter.moving = false;
     }
   }
-
-  /* ------------------------------------------------------------------ */
-  /*  Utility                                                            */
-  /* ------------------------------------------------------------------ */
 
   showNotice(message) {
     this.noticeText.setText(message);

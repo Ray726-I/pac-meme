@@ -4,7 +4,7 @@ class BootScene extends Phaser.Scene {
   }
 
   preload() {
-    // Intentionally left minimal for starter setup.
+    this.load.image("hunter", "assets/chin-tapak-dam-dam.png");
   }
 
   create() {
@@ -37,18 +37,7 @@ class BootScene extends Phaser.Scene {
     gfx.fillStyle(0x111827, 1);
     gfx.fillCircle(18, 10, 2);
     gfx.generateTexture("player", 28, 28);
-    gfx.clear();
 
-    gfx.fillStyle(0xef4444, 1);
-    gfx.fillCircle(14, 11, 10);
-    gfx.fillRect(4, 11, 20, 12);
-    gfx.fillStyle(0xffffff, 1);
-    gfx.fillCircle(10, 12, 3);
-    gfx.fillCircle(18, 12, 3);
-    gfx.fillStyle(0x111827, 1);
-    gfx.fillCircle(10, 12, 1);
-    gfx.fillCircle(18, 12, 1);
-    gfx.generateTexture("hunter", 28, 28);
     gfx.destroy();
   }
 }
