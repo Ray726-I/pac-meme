@@ -4,6 +4,7 @@ class GameScene extends Phaser.Scene {
     this.tileSize = 40;
     this.gridWidth = 16;
     this.gridHeight = 16;
+    this.centerSnapThreshold = 1.1;
     this.basePlayerSpeed = 160;
     this.baseHunterSpeed = 95;
   }
@@ -16,8 +17,6 @@ class GameScene extends Phaser.Scene {
 
     this.currentDirection = { x: 0, y: 0 };
     this.nextDirection = { x: 0, y: 0 };
-    this.hunterDirection = { x: 0, y: 0 };
-    this.hunterDecisionAt = 0;
 
     this.invulnerable = false;
     this.gameOver = false;
@@ -30,7 +29,7 @@ class GameScene extends Phaser.Scene {
 
     this.levelLayout = [
       "################",
-      "#......##......#",
+      "#..K...##......#",
       "#.####.##.####.#",
       "#.#....##....#.#",
       "#.#.##.##.##.#.#",
@@ -50,15 +49,19 @@ class GameScene extends Phaser.Scene {
     this.walls = this.physics.add.staticGroup();
     this.pellets = this.physics.add.staticGroup();
     this.playerSpawn = { x: 0, y: 0 };
-    this.hunterSpawn = { x: 0, y: 0 };
+    this.hunterSpawns = [];
 
     this.buildLevel();
     this.createActors();
     this.createHud();
 
     this.physics.add.collider(this.player, this.walls);
-    this.physics.add.collider(this.hunter, this.walls);
-    this.physics.add.collider(this.player, this.hunter, this.handlePlayerCaught, null, this);
+
+    for (const hunter of this.hunters) {
+      this.physics.add.collider(hunter.sprite, this.walls);
+      this.physics.add.overlap(this.player, hunter.sprite, this.handlePlayerCaught, null, this);
+    }
+
     this.physics.add.overlap(this.player, this.pellets, this.handlePellet, null, this);
   }
 
@@ -76,7 +79,7 @@ class GameScene extends Phaser.Scene {
 
     this.updatePlayerDirection();
     this.updatePlayerMovement();
-    this.updateHunterMovement(time);
+    this.updateHuntersMovement(time);
   }
 
   buildLevel() {
@@ -92,10 +95,14 @@ class GameScene extends Phaser.Scene {
           this.pellets.create(worldX, worldY, "pellet");
         } else if (cell === "P") {
           this.playerSpawn = { x: worldX, y: worldY };
-        } else if (cell === "H") {
-          this.hunterSpawn = { x: worldX, y: worldY };
+        } else if (cell === "H" || cell === "K") {
+          this.hunterSpawns.push({ x: worldX, y: worldY });
         }
       }
+    }
+
+    if (this.hunterSpawns.length === 0) {
+      this.hunterSpawns.push({ x: this.gridToWorld(8), y: this.gridToWorld(14) });
     }
   }
 
@@ -105,10 +112,24 @@ class GameScene extends Phaser.Scene {
     this.player.setDepth(2);
     this.player.body.setSize(22, 22);
 
-    this.hunter = this.physics.add.sprite(this.hunterSpawn.x, this.hunterSpawn.y, "hunter");
-    this.hunter.setCollideWorldBounds(true);
-    this.hunter.setDepth(2);
-    this.hunter.body.setSize(22, 22);
+    this.hunters = this.hunterSpawns.map((spawn, index) => {
+      const sprite = this.physics.add.sprite(spawn.x, spawn.y, "hunter");
+      sprite.setCollideWorldBounds(true);
+      sprite.setDepth(2);
+      sprite.body.setSize(22, 22);
+
+      if (index === 1) {
+        sprite.setTint(0xfb923c);
+      }
+
+      return {
+        sprite,
+        spawn: { ...spawn },
+        direction: { x: 0, y: 0 },
+        nextThinkAt: 0,
+        baseSpeed: this.baseHunterSpeed + index * 8,
+      };
+    });
   }
 
   createHud() {
@@ -173,35 +194,68 @@ class GameScene extends Phaser.Scene {
     );
   }
 
-  updateHunterMovement(time) {
-    const hunterCell = this.worldToGrid(this.hunter.x, this.hunter.y);
-    const atCenter = this.isAtCellCenter(this.hunter, hunterCell);
+  updateHuntersMovement(time) {
+    const playerCell = this.worldToGrid(this.player.x, this.player.y);
 
-    if (atCenter) {
-      this.snapToCellCenter(this.hunter, hunterCell);
+    for (const hunter of this.hunters) {
+      const hunterCell = this.worldToGrid(hunter.sprite.x, hunter.sprite.y);
+      const atCenter = this.isAtCellCenter(hunter.sprite, hunterCell);
+      const needsDirection = hunter.direction.x === 0 && hunter.direction.y === 0;
 
-      if (time >= this.hunterDecisionAt) {
-        const playerCell = this.worldToGrid(this.player.x, this.player.y);
-        const nextStep = this.findPathStep(hunterCell, playerCell);
+      if (atCenter || needsDirection) {
+        this.snapToCellCenter(hunter.sprite, hunterCell);
 
-        if (nextStep) {
-          this.hunterDirection = {
-            x: nextStep.x - hunterCell.x,
-            y: nextStep.y - hunterCell.y,
-          };
+        if (time >= hunter.nextThinkAt || needsDirection) {
+          const nextStep = this.findPathStep(hunterCell, playerCell);
+
+          if (nextStep) {
+            hunter.direction = {
+              x: nextStep.x - hunterCell.x,
+              y: nextStep.y - hunterCell.y,
+            };
+          } else {
+            hunter.direction = this.pickRandomDirection(hunterCell, hunter.direction);
+          }
+
+          hunter.nextThinkAt = time + Phaser.Math.Between(120, 210);
         }
 
-        this.hunterDecisionAt = time + 180;
+        if (!this.canMove(hunterCell.x + hunter.direction.x, hunterCell.y + hunter.direction.y)) {
+          hunter.direction = this.pickRandomDirection(hunterCell, { x: 0, y: 0 });
+        }
       }
 
-      if (!this.canMove(hunterCell.x + this.hunterDirection.x, hunterCell.y + this.hunterDirection.y)) {
-        this.hunterDirection = { x: 0, y: 0 };
+      const levelBoost = (this.level - 1) * 8;
+      const hunterSpeed = Phaser.Math.Clamp(hunter.baseSpeed + levelBoost, 95, 250);
+      hunter.sprite.body.setVelocity(hunter.direction.x * hunterSpeed, hunter.direction.y * hunterSpeed);
+    }
+  }
+
+  pickRandomDirection(cell, preferredDirection) {
+    const directions = [
+      { x: 1, y: 0 },
+      { x: -1, y: 0 },
+      { x: 0, y: 1 },
+      { x: 0, y: -1 },
+    ];
+
+    const options = directions.filter((dir) => this.canMove(cell.x + dir.x, cell.y + dir.y));
+
+    if (options.length === 0) {
+      return { x: 0, y: 0 };
+    }
+
+    if (preferredDirection.x !== 0 || preferredDirection.y !== 0) {
+      const keepCurrent = options.find(
+        (dir) => dir.x === preferredDirection.x && dir.y === preferredDirection.y
+      );
+
+      if (keepCurrent && Math.random() < 0.6) {
+        return keepCurrent;
       }
     }
 
-    const levelBoost = (this.level - 1) * 9;
-    const hunterSpeed = Phaser.Math.Clamp(this.baseHunterSpeed + levelBoost, 95, 220);
-    this.hunter.body.setVelocity(this.hunterDirection.x * hunterSpeed, this.hunterDirection.y * hunterSpeed);
+    return Phaser.Utils.Array.GetRandom(options);
   }
 
   handlePellet(player, pellet) {
@@ -233,13 +287,11 @@ class GameScene extends Phaser.Scene {
 
     this.invulnerable = true;
     this.player.body.setVelocity(0, 0);
-    this.hunter.body.setVelocity(0, 0);
     this.currentDirection = { x: 0, y: 0 };
     this.nextDirection = { x: 0, y: 0 };
-    this.hunterDirection = { x: 0, y: 0 };
 
     this.player.setPosition(this.playerSpawn.x, this.playerSpawn.y);
-    this.hunter.setPosition(this.hunterSpawn.x, this.hunterSpawn.y);
+    this.resetHuntersToSpawn();
 
     this.tweens.add({
       targets: this.player,
@@ -254,6 +306,15 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  resetHuntersToSpawn() {
+    for (const hunter of this.hunters) {
+      hunter.sprite.body.setVelocity(0, 0);
+      hunter.sprite.setPosition(hunter.spawn.x, hunter.spawn.y);
+      hunter.direction = { x: 0, y: 0 };
+      hunter.nextThinkAt = this.time.now + 150;
+    }
+  }
+
   levelComplete() {
     if (this.transitioning || this.gameOver) {
       return;
@@ -261,9 +322,8 @@ class GameScene extends Phaser.Scene {
 
     this.transitioning = true;
     this.player.body.setVelocity(0, 0);
-    this.hunter.body.setVelocity(0, 0);
+    this.stopHunters();
     this.currentDirection = { x: 0, y: 0 };
-    this.hunterDirection = { x: 0, y: 0 };
 
     this.updateHighScore(this.score);
     this.showNotice(`Level ${this.level} Cleared`);
@@ -281,7 +341,7 @@ class GameScene extends Phaser.Scene {
   triggerGameOver() {
     this.gameOver = true;
     this.player.body.setVelocity(0, 0);
-    this.hunter.body.setVelocity(0, 0);
+    this.stopHunters();
 
     this.updateHighScore(this.score);
     const centerX = this.scale.width / 2;
@@ -329,6 +389,13 @@ class GameScene extends Phaser.Scene {
       .setDepth(9);
   }
 
+  stopHunters() {
+    for (const hunter of this.hunters) {
+      hunter.sprite.body.setVelocity(0, 0);
+      hunter.direction = { x: 0, y: 0 };
+    }
+  }
+
   showNotice(message) {
     this.noticeText.setText(message);
     this.noticeText.setVisible(true);
@@ -359,7 +426,10 @@ class GameScene extends Phaser.Scene {
   isAtCellCenter(sprite, cell) {
     const centerX = this.gridToWorld(cell.x);
     const centerY = this.gridToWorld(cell.y);
-    return Math.abs(sprite.x - centerX) < 2 && Math.abs(sprite.y - centerY) < 2;
+    return (
+      Math.abs(sprite.x - centerX) <= this.centerSnapThreshold &&
+      Math.abs(sprite.y - centerY) <= this.centerSnapThreshold
+    );
   }
 
   snapToCellCenter(sprite, cell) {
@@ -451,6 +521,7 @@ class GameScene extends Phaser.Scene {
     }
 
     this.highScore = nextScore;
+
     try {
       window.localStorage.setItem("pacMemeHighScore", String(this.highScore));
     } catch (error) {
