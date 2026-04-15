@@ -4,8 +4,8 @@ const GAME_HEIGHT = 700;
 const config = {
   type: Phaser.AUTO,
   parent: "game-container",
-  width: GAME_WIDTH,
-  height: GAME_HEIGHT,
+  width: 640,
+  height: 700,
   backgroundColor: "#0f172a",
   pixelArt: true,
   physics: {
@@ -14,7 +14,7 @@ const config = {
       debug: false,
     },
   },
-  scene: [BootScene, GameScene],
+  scene: [BootScene, StartScene, GameScene, GameOverScene],
 };
 
 new Phaser.Game(config);
