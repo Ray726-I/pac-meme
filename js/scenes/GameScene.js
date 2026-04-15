@@ -19,6 +19,10 @@ class GameScene extends Phaser.Scene {
     this.transitioning = false;
     this.teleporting = false;
     this.nextDirection = { x: 0, y: 0 };
+    this.playerSoundEnabled = true;
+    this.playerUseRotatingOnlyAnimation = false;
+    this.playerAudioOnlyOnRotatingFrames = true;
+    this.playerRotatingNow = false;
   }
 
   create() {
@@ -33,9 +37,30 @@ class GameScene extends Phaser.Scene {
     this.buildLevel();
     this.createActors();
     this.createHud();
+    this.initPlayerAudio();
 
     // Remove pellet under the player at start
     this.collectPelletAt(this.playerAgent.cellX, this.playerAgent.cellY);
+  }
+
+  initPlayerAudio() {
+    this.playerAudio = this.sound.add("player_audio", {
+      loop: true,
+      volume: 0.25,
+    });
+
+    this.events.once("shutdown", this.teardownPlayerAudio, this);
+    this.events.once("destroy", this.teardownPlayerAudio, this);
+  }
+
+  teardownPlayerAudio() {
+    if (!this.playerAudio) return;
+
+    if (this.playerAudio.isPlaying) {
+      this.playerAudio.stop();
+    }
+    this.playerAudio.destroy();
+    this.playerAudio = null;
   }
 
   update(time, delta) {
@@ -127,18 +152,20 @@ class GameScene extends Phaser.Scene {
     const py = this.gridToWorld(this.playerSpawnCell.y);
 
     this.playerAgent = {
-      sprite: this.add.sprite(px, py, "player").setDepth(4),
+      sprite: this.add.sprite(px, py, "player_idle").setDepth(4),
       cellX: this.playerSpawnCell.x,
       cellY: this.playerSpawnCell.y,
       direction: { x: 0, y: 0 },
       moving: false,
       speed: this.basePlayerSpeed,
     };
+    this.playerAgent.sprite.setDisplaySize(this.tileSize + 15, this.tileSize + 15);
+    this.updatePlayerVisualState();
 
     this.hunters = this.hunterSpawnCells.map((spawn, i) => {
       const sx = this.gridToWorld(spawn.x);
       const sy = this.gridToWorld(spawn.y);
-      
+
       let spriteKey = "hunter";
       if (spawn.type === "C") {
         spriteKey = "chin_tapak";
@@ -147,9 +174,11 @@ class GameScene extends Phaser.Scene {
       }
 
       const sprite = this.add.sprite(sx, sy, spriteKey).setDepth(4);
-      
-      if (spriteKey === "chin_tapak" || spriteKey === "max_hunter") {
-        sprite.setDisplaySize(32, 32);
+
+      if (spriteKey === "chin_tapak") {
+        sprite.setDisplaySize(46, 46);
+      } else if (spriteKey === "max_hunter") {
+        sprite.setDisplaySize(35, 35);
       } else if (spawn.type !== "C" && spawn.type !== "M" && i === 1) {
         sprite.setTint(0xfb923c);
       }
@@ -260,6 +289,75 @@ class GameScene extends Phaser.Scene {
       if (agent.direction.x !== 0 || agent.direction.y !== 0) {
         agent.moving = true;
       }
+    }
+
+    this.updatePlayerVisualState();
+  }
+
+  updatePlayerVisualState() {
+    const sprite = this.playerAgent.sprite;
+
+    if (this.playerAgent.moving) {
+      const nextAnim = this.playerUseRotatingOnlyAnimation ? "player-run-rotating" : "player-run";
+      if (!sprite.anims.isPlaying || sprite.anims.currentAnim?.key !== nextAnim) {
+        sprite.play(nextAnim, true);
+      }
+      this.playerRotatingNow = this.isPlayerInRotatingPhase();
+      this.updatePlayerAudioState();
+      return;
+    }
+
+    if (sprite.anims.isPlaying) {
+      sprite.stop();
+    }
+    if (sprite.texture.key !== "player_idle") {
+      sprite.setTexture("player_idle");
+    }
+
+    this.playerRotatingNow = false;
+    this.updatePlayerAudioState();
+  }
+
+  isPlayerInRotatingPhase() {
+    if (!this.playerAgent?.moving) return false;
+
+    const currentKey = this.playerAgent.sprite.anims.currentAnim?.key;
+    if (currentKey === "player-run-rotating") {
+      return true;
+    }
+
+    if (currentKey !== "player-run") {
+      return false;
+    }
+
+    const frame = Number(this.playerAgent.sprite.anims.currentFrame?.textureFrame ?? -1);
+    if (Number.isNaN(frame)) {
+      return false;
+    }
+    return frame >= 24 && frame <= 69;
+  }
+
+  updatePlayerAudioState() {
+    if (!this.playerAudio) return;
+
+    if (!this.playerSoundEnabled) {
+      if (this.playerAudio.isPlaying) {
+        this.playerAudio.stop();
+      }
+      return;
+    }
+
+    const shouldPlay = this.playerAgent.moving && (!this.playerAudioOnlyOnRotatingFrames || this.playerRotatingNow);
+
+    if (shouldPlay) {
+      if (!this.playerAudio.isPlaying) {
+        this.playerAudio.play();
+      }
+      return;
+    }
+
+    if (this.playerAudio.isPlaying) {
+      this.playerAudio.stop();
     }
   }
 
@@ -421,6 +519,7 @@ class GameScene extends Phaser.Scene {
       hunter.isSprinting = true;
       hunter.decisionAt = this.time.now;
       this.playerAgent.moving = false;
+      this.updatePlayerVisualState();
 
       // Unhook sprint after 4 seconds
       this.time.delayedCall(4000, () => {
@@ -434,7 +533,7 @@ class GameScene extends Phaser.Scene {
     this.teleporting = true;
     this.stopAllAgents();
 
-    const origScale = hunter.sprite.scaleX; 
+    const origScale = hunter.sprite.scaleX;
 
     // 1. Vanish Animation
     this.tweens.add({
@@ -464,6 +563,7 @@ class GameScene extends Phaser.Scene {
               hunter.lastTeleportTime = this.time.now;
               hunter.decisionAt = this.time.now;
               this.playerAgent.moving = false; // Reset input momentum
+              this.updatePlayerVisualState();
             }
           });
         });
@@ -486,7 +586,7 @@ class GameScene extends Phaser.Scene {
     if (validCells.length > 0) {
       return Phaser.Utils.Array.GetRandom(validCells);
     }
-    return { x: cx, y: cy }; 
+    return { x: cx, y: cy };
   }
 
   handlePlayerCaught() {
@@ -525,6 +625,7 @@ class GameScene extends Phaser.Scene {
     a.direction = { x: 0, y: 0 };
     a.moving = false;
     a.sprite.setPosition(this.gridToWorld(a.cellX), this.gridToWorld(a.cellY));
+    this.updatePlayerVisualState();
   }
 
   resetHuntersToSpawn() {
@@ -567,10 +668,10 @@ class GameScene extends Phaser.Scene {
 
     // Transition to the unified Game Over scene instead of drawing it over the active level
     this.time.delayedCall(800, () => {
-      this.scene.start("GameOverScene", { 
-        score: this.score, 
+      this.scene.start("GameOverScene", {
+        score: this.score,
         level: this.level,
-        highScore: this.highScore 
+        highScore: this.highScore
       });
     });
   }
@@ -580,6 +681,7 @@ class GameScene extends Phaser.Scene {
     a.direction = { x: 0, y: 0 };
     a.moving = false;
     a.sprite.setPosition(this.gridToWorld(a.cellX), this.gridToWorld(a.cellY));
+    this.updatePlayerVisualState();
 
     for (const h of this.hunters) {
       h.direction = { x: 0, y: 0 };
