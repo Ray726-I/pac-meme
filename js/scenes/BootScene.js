@@ -20,11 +20,15 @@ class BootScene extends Phaser.Scene {
     const tileSize = 40;
     const gfx = this.make.graphics({ x: 0, y: 0, add: false });
 
-    gfx.fillStyle(0x1d4ed8, 1);
-    gfx.fillRect(0, 0, tileSize, tileSize);
-    gfx.lineStyle(2, 0x93c5fd, 0.9);
-    gfx.strokeRect(1, 1, tileSize - 2, tileSize - 2);
-    gfx.generateTexture("wall", tileSize, tileSize);
+    // Heart texture for lives
+    gfx.fillStyle(0xef4444, 1);
+    gfx.beginPath();
+    gfx.arc(8, 8, 6, Math.PI, 0, false);
+    gfx.arc(20, 8, 6, Math.PI, 0, false);
+    gfx.lineTo(14, 24);
+    gfx.closePath();
+    gfx.fillPath();
+    gfx.generateTexture("heart", 28, 28);
     gfx.clear();
 
     gfx.fillStyle(0xf8fafc, 1);

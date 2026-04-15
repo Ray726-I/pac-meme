@@ -83,7 +83,7 @@ class GameScene extends Phaser.Scene {
         const wy = this.gridToWorld(row);
 
         if (cell === "#") {
-          this.add.image(wx, wy, "wall").setDepth(1);
+          // Walls are drawn later mathematically
         } else if (cell === ".") {
           const pellet = this.add.image(wx, wy, "pellet").setDepth(2);
           this.pelletByCell.set(`${col},${row}`, pellet);
@@ -97,6 +97,43 @@ class GameScene extends Phaser.Scene {
 
     if (this.hunterSpawnCells.length === 0) {
       this.hunterSpawnCells.push({ x: 8, y: 14 });
+    }
+
+    this.drawTubularWalls();
+  }
+
+  drawTubularWalls() {
+    const gfx = this.add.graphics().setDepth(1);
+    
+    // Outer thick blue tubes
+    gfx.fillStyle(0x1d4ed8, 1);
+    this.drawTubes(gfx, 4, 16); 
+    
+    // Inner black tubes to hollow them out
+    gfx.fillStyle(0x0f172a, 1); 
+    this.drawTubes(gfx, 8, 12); 
+  }
+
+  drawTubes(gfx, margin, cornerRadius) {
+    const ts = this.tileSize;
+    const isW = (c, r) => r>=0 && r<this.gridHeight && c>=0 && c<this.gridWidth && this.levelLayout[r][c] === "#";
+
+    for (let row = 0; row < this.gridHeight; row++) {
+      for (let col = 0; col < this.gridWidth; col++) {
+        if (!isW(col, row)) continue;
+        
+        const x = col * ts;
+        const y = row * ts;
+        const size = ts - 2 * margin;
+
+        gfx.fillRoundedRect(x + margin, y + margin, size, size, cornerRadius);
+
+        const half = ts / 2;
+        if (isW(col, row - 1)) gfx.fillRect(x + margin, y, size, half);
+        if (isW(col, row + 1)) gfx.fillRect(x + margin, y + half, size, half);
+        if (isW(col - 1, row)) gfx.fillRect(x, y + margin, half, size);
+        if (isW(col + 1, row)) gfx.fillRect(x + half, y + margin, half, size);
+      }
     }
   }
 
@@ -144,18 +181,23 @@ class GameScene extends Phaser.Scene {
   createHud() {
     this.hudStyle = {
       fontFamily: "Trebuchet MS",
-      fontSize: "18px",
+      fontSize: "20px",
       color: "#e2e8f0",
       stroke: "#020617",
       strokeThickness: 4,
     };
 
-    this.scoreText = this.add.text(10, 8, "", this.hudStyle).setDepth(6);
-    this.levelText = this.add.text(10, 32, "", this.hudStyle).setDepth(6);
-    this.livesText = this.add.text(10, 56, "", this.hudStyle).setDepth(6);
+    this.scoreText = this.add.text(20, 655, "", this.hudStyle).setDepth(6);
+    this.levelText = this.add.text(200, 655, "", this.hudStyle).setDepth(6);
+
+    this.livesIcons = [];
+    for (let i = 0; i < 3; i++) {
+        const heart = this.add.image(520 + i * 40, 668, "heart").setDepth(6);
+        this.livesIcons.push(heart);
+    }
 
     this.noticeText = this.add
-      .text(this.scale.width / 2, this.scale.height / 2, "", {
+      .text(this.scale.width / 2, (this.scale.height - 60) / 2, "", {
         fontFamily: "Trebuchet MS",
         fontSize: "34px",
         color: "#f8fafc",
@@ -426,7 +468,7 @@ class GameScene extends Phaser.Scene {
     this.updateHighScore(this.score);
 
     const cx = this.scale.width / 2;
-    const cy = this.scale.height / 2;
+    const cy = (this.scale.height - 60) / 2;
 
     this.add
       .rectangle(cx, cy, 420, 220, 0x020617, 0.88)
@@ -560,7 +602,10 @@ class GameScene extends Phaser.Scene {
   refreshHud() {
     this.scoreText.setText(`Score: ${this.score}`);
     this.levelText.setText(`Level: ${this.level}`);
-    this.livesText.setText(`Lives: ${this.lives}`);
+    
+    this.livesIcons.forEach((icon, index) => {
+        icon.setVisible(index < this.lives);
+    });
   }
 
   readHighScore() {
