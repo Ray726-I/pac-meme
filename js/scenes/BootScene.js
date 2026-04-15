@@ -9,11 +9,7 @@ class BootScene extends Phaser.Scene {
 
   create() {
     this.createGeneratedTextures();
-    this.scene.start("GameScene", {
-      level: 1,
-      score: 0,
-      highScore: Number(window.localStorage.getItem("pacMemeHighScore") || 0),
-    });
+    this.scene.start("StartScene");
   }
 
   createGeneratedTextures() {

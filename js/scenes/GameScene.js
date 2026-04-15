@@ -22,26 +22,8 @@ class GameScene extends Phaser.Scene {
 
   create() {
     this.cursors = this.input.keyboard.createCursorKeys();
-    this.restartKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
-    this.levelLayout = [
-      "################",
-      "#..K...##......#",
-      "#.####.##.####.#",
-      "#.#....##....#.#",
-      "#.#.##.##.##.#.#",
-      "#....#....#....#",
-      "####.#.##.#.####",
-      "#......P.......#",
-      "#.####.##.####.#",
-      "#.#....##....#.#",
-      "#.#.##.##.##.#.#",
-      "#....#....#....#",
-      "####.#.##.#.####",
-      "#......##......#",
-      "#.####..H.####.#",
-      "################",
-    ];
+    this.levelLayout = window.GameLevels[this.level] || window.GameLevels[2];
 
     this.pelletByCell = new Map();
     this.playerSpawnCell = { x: 7, y: 7 };
@@ -57,9 +39,6 @@ class GameScene extends Phaser.Scene {
 
   update(time, delta) {
     if (this.gameOver) {
-      if (Phaser.Input.Keyboard.JustDown(this.restartKey)) {
-        this.scene.restart({ level: 1, score: 0, highScore: this.highScore, lives: 3 });
-      }
       return;
     }
 
@@ -104,24 +83,24 @@ class GameScene extends Phaser.Scene {
 
   drawTubularWalls() {
     const gfx = this.add.graphics().setDepth(1);
-    
+
     // Outer thick blue tubes
     gfx.fillStyle(0x1d4ed8, 1);
-    this.drawTubes(gfx, 4, 16); 
-    
+    this.drawTubes(gfx, 4, 16);
+
     // Inner black tubes to hollow them out
-    gfx.fillStyle(0x0f172a, 1); 
-    this.drawTubes(gfx, 8, 12); 
+    gfx.fillStyle(0x0f172a, 1);
+    this.drawTubes(gfx, 8, 12);
   }
 
   drawTubes(gfx, margin, cornerRadius) {
     const ts = this.tileSize;
-    const isW = (c, r) => r>=0 && r<this.gridHeight && c>=0 && c<this.gridWidth && this.levelLayout[r][c] === "#";
+    const isW = (c, r) => r >= 0 && r < this.gridHeight && c >= 0 && c < this.gridWidth && this.levelLayout[r][c] === "#";
 
     for (let row = 0; row < this.gridHeight; row++) {
       for (let col = 0; col < this.gridWidth; col++) {
         if (!isW(col, row)) continue;
-        
+
         const x = col * ts;
         const y = row * ts;
         const size = ts - 2 * margin;
@@ -192,8 +171,8 @@ class GameScene extends Phaser.Scene {
 
     this.livesIcons = [];
     for (let i = 0; i < 3; i++) {
-        const heart = this.add.image(520 + i * 40, 668, "heart").setDepth(6);
-        this.livesIcons.push(heart);
+      const heart = this.add.image(520 + i * 40, 668, "heart").setDepth(6);
+      this.livesIcons.push(heart);
     }
 
     this.noticeText = this.add
@@ -362,7 +341,7 @@ class GameScene extends Phaser.Scene {
 
     pellet.destroy();
     this.pelletByCell.delete(key);
-    this.score += 10;
+    this.score += 1;
     this.refreshHud();
 
     if (this.pelletByCell.size === 0) {
@@ -467,49 +446,14 @@ class GameScene extends Phaser.Scene {
     this.stopAllAgents();
     this.updateHighScore(this.score);
 
-    const cx = this.scale.width / 2;
-    const cy = (this.scale.height - 60) / 2;
-
-    this.add
-      .rectangle(cx, cy, 420, 220, 0x020617, 0.88)
-      .setStrokeStyle(2, 0x38bdf8, 0.9)
-      .setDepth(8);
-
-    this.add
-      .text(cx, cy - 70, "Game Over", {
-        fontFamily: "Trebuchet MS",
-        fontSize: "40px",
-        color: "#f8fafc",
-      })
-      .setOrigin(0.5)
-      .setDepth(9);
-
-    this.add
-      .text(cx, cy - 12, `Score: ${this.score}`, {
-        fontFamily: "Trebuchet MS",
-        fontSize: "24px",
-        color: "#e2e8f0",
-      })
-      .setOrigin(0.5)
-      .setDepth(9);
-
-    this.add
-      .text(cx, cy + 22, `High Score: ${this.highScore}`, {
-        fontFamily: "Trebuchet MS",
-        fontSize: "22px",
-        color: "#bae6fd",
-      })
-      .setOrigin(0.5)
-      .setDepth(9);
-
-    this.add
-      .text(cx, cy + 66, "Press SPACE to restart", {
-        fontFamily: "Trebuchet MS",
-        fontSize: "18px",
-        color: "#f8fafc",
-      })
-      .setOrigin(0.5)
-      .setDepth(9);
+    // Transition to the unified Game Over scene instead of drawing it over the active level
+    this.time.delayedCall(800, () => {
+      this.scene.start("GameOverScene", { 
+        score: this.score, 
+        level: this.level,
+        highScore: this.highScore 
+      });
+    });
   }
 
   stopAllAgents() {
@@ -602,9 +546,9 @@ class GameScene extends Phaser.Scene {
   refreshHud() {
     this.scoreText.setText(`Score: ${this.score}`);
     this.levelText.setText(`Level: ${this.level}`);
-    
+
     this.livesIcons.forEach((icon, index) => {
-        icon.setVisible(index < this.lives);
+      icon.setVisible(index < this.lives);
     });
   }
 
