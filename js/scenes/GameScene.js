@@ -17,6 +17,7 @@ class GameScene extends Phaser.Scene {
     this.invulnerable = false;
     this.gameOver = false;
     this.transitioning = false;
+    this.teleporting = false;
     this.nextDirection = { x: 0, y: 0 };
   }
 
@@ -42,10 +43,11 @@ class GameScene extends Phaser.Scene {
       return;
     }
 
-    if (this.transitioning) return;
+    if (this.transitioning || this.teleporting) return;
 
     this.readPlayerInput();
     this.movePlayer(delta);
+    this.checkTeleportTriggers(time);
     this.moveHunters(delta, time);
     this.checkHunterContact();
   }
@@ -136,8 +138,19 @@ class GameScene extends Phaser.Scene {
     this.hunters = this.hunterSpawnCells.map((spawn, i) => {
       const sx = this.gridToWorld(spawn.x);
       const sy = this.gridToWorld(spawn.y);
-      const sprite = this.add.sprite(sx, sy, "hunter").setDepth(4);
-      if (i === 1) sprite.setTint(0xfb923c);
+      
+      let spriteKey = "hunter";
+      if (this.level === 1) {
+        spriteKey = "chin_tapak";
+      }
+
+      const sprite = this.add.sprite(sx, sy, spriteKey).setDepth(4);
+      
+      if (spriteKey === "chin_tapak") {
+        sprite.setDisplaySize(32, 32);
+      } else if (i === 1) {
+        sprite.setTint(0xfb923c);
+      }
 
       return {
         sprite,
@@ -149,6 +162,7 @@ class GameScene extends Phaser.Scene {
         moving: false,
         speed: this.baseHunterSpeed + i * 8,
         decisionAt: 0,
+        lastTeleportTime: -10000,
       };
     });
   }
@@ -368,6 +382,79 @@ class GameScene extends Phaser.Scene {
         return;
       }
     }
+  }
+
+  checkTeleportTriggers(time) {
+    if (this.level !== 1) return;
+    if (this.transitioning || this.gameOver || this.teleporting || this.invulnerable) return;
+
+    for (const hunter of this.hunters) {
+      const dist = Phaser.Math.Distance.Between(hunter.sprite.x, hunter.sprite.y, this.playerAgent.sprite.x, this.playerAgent.sprite.y);
+      // Trigger if far enough (>240px) and cooldown passed (10 seconds)
+      if (dist > 240 && (time - hunter.lastTeleportTime) > 10000) {
+        this.triggerTeleportSequence(hunter, time);
+        return; 
+      }
+    }
+  }
+
+  triggerTeleportSequence(hunter, time) {
+    this.teleporting = true;
+    this.stopAllAgents();
+
+    const origScale = hunter.sprite.scaleX; 
+
+    // 1. Vanish Animation
+    this.tweens.add({
+      targets: hunter.sprite,
+      scale: 0,
+      angle: 720,
+      duration: 600,
+      onComplete: () => {
+        // 2. Play Audio 
+        const sfx = this.sound.add("chin_audio");
+        sfx.once("complete", () => {
+          // 3. Move closer to player and Reappear
+          const targetCell = this.findSafeCellNear(this.playerAgent.cellX, this.playerAgent.cellY, 3, 5);
+          hunter.cellX = targetCell.x;
+          hunter.cellY = targetCell.y;
+          hunter.sprite.setPosition(this.gridToWorld(targetCell.x), this.gridToWorld(targetCell.y));
+          hunter.direction = { x: 0, y: 0 };
+          hunter.moving = false;
+
+          this.tweens.add({
+            targets: hunter.sprite,
+            scale: origScale,
+            angle: 0,
+            duration: 300,
+            onComplete: () => {
+              this.teleporting = false;
+              hunter.lastTeleportTime = this.time.now;
+              hunter.decisionAt = this.time.now;
+              this.playerAgent.moving = false; // Reset input momentum
+            }
+          });
+        });
+        sfx.play();
+      }
+    });
+  }
+
+  findSafeCellNear(cx, cy, minR, maxR) {
+    let validCells = [];
+    for (let r = 0; r < this.gridHeight; r++) {
+      for (let c = 0; c < this.gridWidth; c++) {
+        if (!this.canMove(c, r)) continue;
+        const dist = Math.abs(c - cx) + Math.abs(r - cy);
+        if (dist >= minR && dist <= maxR) {
+          validCells.push({ x: c, y: r });
+        }
+      }
+    }
+    if (validCells.length > 0) {
+      return Phaser.Utils.Array.GetRandom(validCells);
+    }
+    return { x: cx, y: cy }; 
   }
 
   handlePlayerCaught() {
