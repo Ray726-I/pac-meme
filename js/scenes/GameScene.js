@@ -127,13 +127,15 @@ class GameScene extends Phaser.Scene {
     const py = this.gridToWorld(this.playerSpawnCell.y);
 
     this.playerAgent = {
-      sprite: this.add.sprite(px, py, "player").setDepth(4),
+      sprite: this.add.sprite(px, py, "player_idle").setDepth(4),
       cellX: this.playerSpawnCell.x,
       cellY: this.playerSpawnCell.y,
       direction: { x: 0, y: 0 },
       moving: false,
       speed: this.basePlayerSpeed,
     };
+    this.playerAgent.sprite.setDisplaySize(this.tileSize - 2, this.tileSize - 2);
+    this.updatePlayerVisualState();
 
     this.hunters = this.hunterSpawnCells.map((spawn, i) => {
       const sx = this.gridToWorld(spawn.x);
@@ -260,6 +262,25 @@ class GameScene extends Phaser.Scene {
       if (agent.direction.x !== 0 || agent.direction.y !== 0) {
         agent.moving = true;
       }
+    }
+
+    this.updatePlayerVisualState();
+  }
+
+  updatePlayerVisualState() {
+    const sprite = this.playerAgent.sprite;
+    if (this.playerAgent.moving) {
+      if (!sprite.anims.isPlaying || sprite.anims.currentAnim?.key !== "player-run") {
+        sprite.play("player-run", true);
+      }
+      return;
+    }
+
+    if (sprite.anims.isPlaying) {
+      sprite.stop();
+    }
+    if (sprite.texture.key !== "player_idle") {
+      sprite.setTexture("player_idle");
     }
   }
 
@@ -421,6 +442,7 @@ class GameScene extends Phaser.Scene {
       hunter.isSprinting = true;
       hunter.decisionAt = this.time.now;
       this.playerAgent.moving = false;
+      this.updatePlayerVisualState();
 
       // Unhook sprint after 4 seconds
       this.time.delayedCall(4000, () => {
@@ -464,6 +486,7 @@ class GameScene extends Phaser.Scene {
               hunter.lastTeleportTime = this.time.now;
               hunter.decisionAt = this.time.now;
               this.playerAgent.moving = false; // Reset input momentum
+              this.updatePlayerVisualState();
             }
           });
         });
@@ -525,6 +548,7 @@ class GameScene extends Phaser.Scene {
     a.direction = { x: 0, y: 0 };
     a.moving = false;
     a.sprite.setPosition(this.gridToWorld(a.cellX), this.gridToWorld(a.cellY));
+    this.updatePlayerVisualState();
   }
 
   resetHuntersToSpawn() {
@@ -580,6 +604,7 @@ class GameScene extends Phaser.Scene {
     a.direction = { x: 0, y: 0 };
     a.moving = false;
     a.sprite.setPosition(this.gridToWorld(a.cellX), this.gridToWorld(a.cellY));
+    this.updatePlayerVisualState();
 
     for (const h of this.hunters) {
       h.direction = { x: 0, y: 0 };
