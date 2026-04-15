@@ -142,11 +142,13 @@ class GameScene extends Phaser.Scene {
       let spriteKey = "hunter";
       if (this.level === 1) {
         spriteKey = "chin_tapak";
+      } else if (this.level === 2) {
+        spriteKey = "max_hunter";
       }
 
       const sprite = this.add.sprite(sx, sy, spriteKey).setDepth(4);
       
-      if (spriteKey === "chin_tapak") {
+      if (spriteKey === "chin_tapak" || spriteKey === "max_hunter") {
         sprite.setDisplaySize(32, 32);
       } else if (i === 1) {
         sprite.setTint(0xfb923c);
@@ -163,6 +165,7 @@ class GameScene extends Phaser.Scene {
         speed: this.baseHunterSpeed + i * 8,
         decisionAt: 0,
         lastTeleportTime: -10000,
+        isSprinting: false,
       };
     });
   }
@@ -305,7 +308,10 @@ class GameScene extends Phaser.Scene {
       // Advance towards target cell
       if (hunter.moving) {
         const levelBoost = (this.level - 1) * 8;
-        const speed = Phaser.Math.Clamp(hunter.speed + levelBoost, 95, 250);
+        let speed = Phaser.Math.Clamp(hunter.speed + levelBoost, 95, 250);
+        if (hunter.isSprinting) {
+          speed = 180;
+        }
         this.advanceAgent(hunter, delta, speed);
       }
     }
@@ -385,17 +391,46 @@ class GameScene extends Phaser.Scene {
   }
 
   checkTeleportTriggers(time) {
-    if (this.level !== 1) return;
     if (this.transitioning || this.gameOver || this.teleporting || this.invulnerable) return;
 
-    for (const hunter of this.hunters) {
-      const dist = Phaser.Math.Distance.Between(hunter.sprite.x, hunter.sprite.y, this.playerAgent.sprite.x, this.playerAgent.sprite.y);
-      // Trigger if far enough (>240px) and cooldown passed (10 seconds)
-      if (dist > 240 && (time - hunter.lastTeleportTime) > 10000) {
-        this.triggerTeleportSequence(hunter, time);
-        return; 
+    if (this.level === 1) {
+      for (const hunter of this.hunters) {
+        const dist = Phaser.Math.Distance.Between(hunter.sprite.x, hunter.sprite.y, this.playerAgent.sprite.x, this.playerAgent.sprite.y);
+        if (dist > 240 && (time - hunter.lastTeleportTime) > 10000) {
+          this.triggerTeleportSequence(hunter, time);
+          return; 
+        }
+      }
+    } else if (this.level === 2) {
+      for (const hunter of this.hunters) {
+        if (hunter.isSprinting) continue;
+        const dist = Phaser.Math.Distance.Between(hunter.sprite.x, hunter.sprite.y, this.playerAgent.sprite.x, this.playerAgent.sprite.y);
+        if (dist > 240 && (time - hunter.lastTeleportTime) > 10000) {
+          this.triggerSprintSequence(hunter, time);
+          return; 
+        }
       }
     }
+  }
+
+  triggerSprintSequence(hunter, time) {
+    this.teleporting = true; // Use this to pause active logic globally
+    this.stopAllAgents();
+
+    const sfx = this.sound.add("max_audio");
+    sfx.once("complete", () => {
+      this.teleporting = false;
+      hunter.lastTeleportTime = this.time.now;
+      hunter.isSprinting = true;
+      hunter.decisionAt = this.time.now;
+      this.playerAgent.moving = false;
+
+      // Unhook sprint after 4 seconds
+      this.time.delayedCall(4000, () => {
+        hunter.isSprinting = false;
+      });
+    });
+    sfx.play();
   }
 
   triggerTeleportSequence(hunter, time) {

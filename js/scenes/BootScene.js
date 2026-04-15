@@ -6,6 +6,9 @@ class BootScene extends Phaser.Scene {
   preload() {
     this.load.image("chin_tapak", "assets/hunters/chin_tapak_dum_dum.png");
     this.load.audio("chin_audio", "assets/hunter-audio/chin_tapak_dum_dum.mp3");
+
+    this.load.image("max_hunter", "assets/hunters/max.png");
+    this.load.audio("max_audio", "assets/hunter-audio/max.mp3");
   }
 
   create() {
