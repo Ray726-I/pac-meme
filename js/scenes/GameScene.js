@@ -1,9 +1,9 @@
 class GameScene extends Phaser.Scene {
   constructor() {
     super("GameScene");
-    this.tileSize = 40;
-    this.gridWidth = 16;
-    this.gridHeight = 16;
+    this.tileSize = 32;
+    this.gridWidth = 20;
+    this.gridHeight = 20;
     this.basePlayerSpeed = 160;
     this.baseHunterSpeed = 100;
   }
@@ -47,7 +47,7 @@ class GameScene extends Phaser.Scene {
 
     this.readPlayerInput();
     this.movePlayer(delta);
-    this.checkTeleportTriggers(time);
+    this.checkSpecialTriggers(time);
     this.moveHunters(delta, time);
     this.checkHunterContact();
   }
@@ -70,14 +70,14 @@ class GameScene extends Phaser.Scene {
           this.pelletByCell.set(`${col},${row}`, pellet);
         } else if (cell === "P") {
           this.playerSpawnCell = { x: col, y: row };
-        } else if (cell === "H" || cell === "K") {
-          this.hunterSpawnCells.push({ x: col, y: row });
+        } else if (cell === "H" || cell === "K" || cell === "C" || cell === "M") {
+          this.hunterSpawnCells.push({ x: col, y: row, type: cell });
         }
       }
     }
 
     if (this.hunterSpawnCells.length === 0) {
-      this.hunterSpawnCells.push({ x: 8, y: 14 });
+      this.hunterSpawnCells.push({ x: 10, y: 10, type: "H" });
     }
 
     this.drawTubularWalls();
@@ -140,9 +140,9 @@ class GameScene extends Phaser.Scene {
       const sy = this.gridToWorld(spawn.y);
       
       let spriteKey = "hunter";
-      if (this.level === 1) {
+      if (spawn.type === "C") {
         spriteKey = "chin_tapak";
-      } else if (this.level === 2) {
+      } else if (spawn.type === "M") {
         spriteKey = "max_hunter";
       }
 
@@ -150,21 +150,22 @@ class GameScene extends Phaser.Scene {
       
       if (spriteKey === "chin_tapak" || spriteKey === "max_hunter") {
         sprite.setDisplaySize(32, 32);
-      } else if (i === 1) {
+      } else if (spawn.type !== "C" && spawn.type !== "M" && i === 1) {
         sprite.setTint(0xfb923c);
       }
 
       return {
         sprite,
+        type: spawn.type,
         cellX: spawn.x,
         cellY: spawn.y,
         spawnCellX: spawn.x,
         spawnCellY: spawn.y,
         direction: { x: 0, y: 0 },
         moving: false,
-        speed: this.baseHunterSpeed + i * 8,
+        speed: this.baseHunterSpeed + (spriteKey === "max_hunter" ? 10 : i * 8),
         decisionAt: 0,
-        lastTeleportTime: -10000,
+        lastTeleportTime: -30000,
         isSprinting: false,
       };
     });
@@ -390,24 +391,20 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  checkTeleportTriggers(time) {
+  checkSpecialTriggers(time) {
     if (this.transitioning || this.gameOver || this.teleporting || this.invulnerable) return;
 
-    if (this.level === 1) {
-      for (const hunter of this.hunters) {
-        const dist = Phaser.Math.Distance.Between(hunter.sprite.x, hunter.sprite.y, this.playerAgent.sprite.x, this.playerAgent.sprite.y);
-        if (dist > 240 && (time - hunter.lastTeleportTime) > 10000) {
+    for (const hunter of this.hunters) {
+      if (hunter.isSprinting) continue;
+
+      const dist = Phaser.Math.Distance.Between(hunter.sprite.x, hunter.sprite.y, this.playerAgent.sprite.x, this.playerAgent.sprite.y);
+      if (dist > 240 && (time - hunter.lastTeleportTime) > 20000) {
+        if (hunter.type === "C") {
           this.triggerTeleportSequence(hunter, time);
-          return; 
-        }
-      }
-    } else if (this.level === 2) {
-      for (const hunter of this.hunters) {
-        if (hunter.isSprinting) continue;
-        const dist = Phaser.Math.Distance.Between(hunter.sprite.x, hunter.sprite.y, this.playerAgent.sprite.x, this.playerAgent.sprite.y);
-        if (dist > 240 && (time - hunter.lastTeleportTime) > 10000) {
+          return;
+        } else if (hunter.type === "M") {
           this.triggerSprintSequence(hunter, time);
-          return; 
+          return;
         }
       }
     }
