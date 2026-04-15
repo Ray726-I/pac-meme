@@ -19,6 +19,10 @@ class GameScene extends Phaser.Scene {
     this.transitioning = false;
     this.teleporting = false;
     this.nextDirection = { x: 0, y: 0 };
+    this.playerSoundEnabled = true;
+    this.playerUseRotatingOnlyAnimation = false;
+    this.playerAudioOnlyOnRotatingFrames = true;
+    this.playerRotatingNow = false;
   }
 
   create() {
@@ -33,9 +37,30 @@ class GameScene extends Phaser.Scene {
     this.buildLevel();
     this.createActors();
     this.createHud();
+    this.initPlayerAudio();
 
     // Remove pellet under the player at start
     this.collectPelletAt(this.playerAgent.cellX, this.playerAgent.cellY);
+  }
+
+  initPlayerAudio() {
+    this.playerAudio = this.sound.add("player_audio", {
+      loop: true,
+      volume: 0.25,
+    });
+
+    this.events.once("shutdown", this.teardownPlayerAudio, this);
+    this.events.once("destroy", this.teardownPlayerAudio, this);
+  }
+
+  teardownPlayerAudio() {
+    if (!this.playerAudio) return;
+
+    if (this.playerAudio.isPlaying) {
+      this.playerAudio.stop();
+    }
+    this.playerAudio.destroy();
+    this.playerAudio = null;
   }
 
   update(time, delta) {
@@ -269,10 +294,14 @@ class GameScene extends Phaser.Scene {
 
   updatePlayerVisualState() {
     const sprite = this.playerAgent.sprite;
+
     if (this.playerAgent.moving) {
-      if (!sprite.anims.isPlaying || sprite.anims.currentAnim?.key !== "player-run") {
-        sprite.play("player-run", true);
+      const nextAnim = this.playerUseRotatingOnlyAnimation ? "player-run-rotating" : "player-run";
+      if (!sprite.anims.isPlaying || sprite.anims.currentAnim?.key !== nextAnim) {
+        sprite.play(nextAnim, true);
       }
+      this.playerRotatingNow = this.isPlayerInRotatingPhase();
+      this.updatePlayerAudioState();
       return;
     }
 
@@ -281,6 +310,52 @@ class GameScene extends Phaser.Scene {
     }
     if (sprite.texture.key !== "player_idle") {
       sprite.setTexture("player_idle");
+    }
+
+    this.playerRotatingNow = false;
+    this.updatePlayerAudioState();
+  }
+
+  isPlayerInRotatingPhase() {
+    if (!this.playerAgent?.moving) return false;
+
+    const currentKey = this.playerAgent.sprite.anims.currentAnim?.key;
+    if (currentKey === "player-run-rotating") {
+      return true;
+    }
+
+    if (currentKey !== "player-run") {
+      return false;
+    }
+
+    const frame = Number(this.playerAgent.sprite.anims.currentFrame?.textureFrame ?? -1);
+    if (Number.isNaN(frame)) {
+      return false;
+    }
+    return frame >= 24 && frame <= 69;
+  }
+
+  updatePlayerAudioState() {
+    if (!this.playerAudio) return;
+
+    if (!this.playerSoundEnabled) {
+      if (this.playerAudio.isPlaying) {
+        this.playerAudio.stop();
+      }
+      return;
+    }
+
+    const shouldPlay = this.playerAgent.moving && (!this.playerAudioOnlyOnRotatingFrames || this.playerRotatingNow);
+
+    if (shouldPlay) {
+      if (!this.playerAudio.isPlaying) {
+        this.playerAudio.play();
+      }
+      return;
+    }
+
+    if (this.playerAudio.isPlaying) {
+      this.playerAudio.stop();
     }
   }
 
