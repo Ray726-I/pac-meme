@@ -159,13 +159,13 @@ class GameScene extends Phaser.Scene {
       moving: false,
       speed: this.basePlayerSpeed,
     };
-    this.playerAgent.sprite.setDisplaySize(this.tileSize - 2, this.tileSize - 2);
+    this.playerAgent.sprite.setDisplaySize(this.tileSize + 15, this.tileSize + 15);
     this.updatePlayerVisualState();
 
     this.hunters = this.hunterSpawnCells.map((spawn, i) => {
       const sx = this.gridToWorld(spawn.x);
       const sy = this.gridToWorld(spawn.y);
-      
+
       let spriteKey = "hunter";
       if (spawn.type === "C") {
         spriteKey = "chin_tapak";
@@ -174,9 +174,11 @@ class GameScene extends Phaser.Scene {
       }
 
       const sprite = this.add.sprite(sx, sy, spriteKey).setDepth(4);
-      
-      if (spriteKey === "chin_tapak" || spriteKey === "max_hunter") {
-        sprite.setDisplaySize(32, 32);
+
+      if (spriteKey === "chin_tapak") {
+        sprite.setDisplaySize(46, 46);
+      } else if (spriteKey === "max_hunter") {
+        sprite.setDisplaySize(35, 35);
       } else if (spawn.type !== "C" && spawn.type !== "M" && i === 1) {
         sprite.setTint(0xfb923c);
       }
@@ -531,7 +533,7 @@ class GameScene extends Phaser.Scene {
     this.teleporting = true;
     this.stopAllAgents();
 
-    const origScale = hunter.sprite.scaleX; 
+    const origScale = hunter.sprite.scaleX;
 
     // 1. Vanish Animation
     this.tweens.add({
@@ -584,7 +586,7 @@ class GameScene extends Phaser.Scene {
     if (validCells.length > 0) {
       return Phaser.Utils.Array.GetRandom(validCells);
     }
-    return { x: cx, y: cy }; 
+    return { x: cx, y: cy };
   }
 
   handlePlayerCaught() {
@@ -666,10 +668,10 @@ class GameScene extends Phaser.Scene {
 
     // Transition to the unified Game Over scene instead of drawing it over the active level
     this.time.delayedCall(800, () => {
-      this.scene.start("GameOverScene", { 
-        score: this.score, 
+      this.scene.start("GameOverScene", {
+        score: this.score,
         level: this.level,
-        highScore: this.highScore 
+        highScore: this.highScore
       });
     });
   }
