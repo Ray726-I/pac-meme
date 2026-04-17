@@ -20,6 +20,11 @@ class BootScene extends Phaser.Scene {
     this.load.audio("max_audio", "assets/hunter-audio/max.mp3");
     this.load.image("amitabh_aag", "assets/hunters/amitabh-aag.png");
     this.load.audio("aag_audio", "assets/hunter-audio/aag.mp3");
+    this.load.image("mahi_hunter", "assets/hunters/mahi.png");
+    this.load.image("cricket_ball", "assets/cricket-ball.png");
+    this.load.audio("mahi_throw_audio", "assets/hunter-audio/mahi-maar-raha-hai.mp3");
+    this.load.audio("mahi_phase_audio", "assets/hunter-audio/bole-jo-koyal.mp3");
+    this.load.audio("minecraft_damage", "assets/minecraft-damage.mp3");
     this.load.spritesheet("fire_projectile", "assets/fire_sheet.png", {
       frameWidth: 72,
       frameHeight: 96,

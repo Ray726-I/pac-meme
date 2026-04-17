@@ -20,6 +20,7 @@ class GameScene extends Phaser.Scene {
     this.gameOver = false;
     this.transitioning = false;
     this.fireProjectiles = [];
+    this.cricketBalls = [];
     this.nextDirection = { x: 0, y: 0 };
     this.playerSoundEnabled = true;
     this.playerAudioPlayCount = 0;
@@ -101,6 +102,7 @@ class GameScene extends Phaser.Scene {
     this.checkSpecialTriggers(time);
     this.moveHunters(delta, time);
     this.updateFireProjectiles(delta);
+    this.updateCricketBalls(delta);
     this.checkHunterContact();
   }
 
@@ -122,7 +124,7 @@ class GameScene extends Phaser.Scene {
           this.pelletByCell.set(`${col},${row}`, pellet);
         } else if (cell === "P") {
           this.playerSpawnCell = { x: col, y: row };
-        } else if (cell === "H" || cell === "K" || cell === "C" || cell === "M" || cell === "A") {
+        } else if (cell === "H" || cell === "K" || cell === "C" || cell === "M" || cell === "A" || cell === "D") {
           this.hunterSpawnCells.push({ x: col, y: row, type: cell });
         }
       }
@@ -203,6 +205,8 @@ class GameScene extends Phaser.Scene {
         spriteKey = "max_hunter";
       } else if (spawn.type === "A") {
         spriteKey = "amitabh_aag";
+      } else if (spawn.type === "D") {
+        spriteKey = "mahi_hunter";
       }
 
       const sprite = this.add.sprite(sx, sy, spriteKey).setDepth(4);
@@ -213,6 +217,8 @@ class GameScene extends Phaser.Scene {
         sprite.setDisplaySize(42, 42);
       } else if (spriteKey === "amitabh_aag") {
         sprite.setDisplaySize(64, 36);
+      } else if (spriteKey === "mahi_hunter") {
+        sprite.setDisplaySize(52, 52);
       } else if (spawn.type !== "C" && spawn.type !== "M" && i === 1) {
         sprite.setTint(0xfb923c);
       }
@@ -231,9 +237,11 @@ class GameScene extends Phaser.Scene {
         lastSpecialTime: -30000,
         isSprinting: false,
         isTeleporting: false,
+        isPhasing: false,
+        phaseAudio: null,
         baseScaleX: sprite.scaleX,
         baseScaleY: sprite.scaleY,
-        specialCooldown: spawn.type === "A" ? 2500 : 20000,
+        specialCooldown: spawn.type === "A" ? 2500 : (spawn.type === "D" ? 7000 : 20000),
       };
     });
   }
@@ -417,7 +425,7 @@ class GameScene extends Phaser.Scene {
         if (time >= hunter.decisionAt) {
           const start = { x: hunter.cellX, y: hunter.cellY };
           const goal = { x: this.playerAgent.cellX, y: this.playerAgent.cellY };
-          const nextStep = this.findPathStep(start, goal);
+          const nextStep = this.findPathStep(start, goal, hunter);
 
           if (nextStep) {
             hunter.direction = {
@@ -430,13 +438,13 @@ class GameScene extends Phaser.Scene {
         }
 
         // Validate / fallback
-        if (!this.canMove(hunter.cellX + hunter.direction.x, hunter.cellY + hunter.direction.y)) {
+        if (!this.canHunterMove(hunter, hunter.cellX + hunter.direction.x, hunter.cellY + hunter.direction.y)) {
           const dirs = [
             { x: 1, y: 0 },
             { x: -1, y: 0 },
             { x: 0, y: 1 },
             { x: 0, y: -1 },
-          ].filter((d) => this.canMove(hunter.cellX + d.x, hunter.cellY + d.y));
+          ].filter((d) => this.canHunterMove(hunter, hunter.cellX + d.x, hunter.cellY + d.y));
 
           hunter.direction =
             dirs.length > 0
@@ -455,6 +463,8 @@ class GameScene extends Phaser.Scene {
         let speed = Phaser.Math.Clamp(hunter.speed + levelBoost, 95, 250);
         if (hunter.isSprinting) {
           speed = 180;
+        } else if (hunter.isPhasing) {
+          speed = Math.max(80, speed * 0.72);
         }
         this.advanceAgent(hunter, delta, speed);
       }
@@ -498,6 +508,46 @@ class GameScene extends Phaser.Scene {
     }
 
     this.fireProjectiles = remaining;
+  }
+
+  updateCricketBalls(delta) {
+    if (this.cricketBalls.length === 0) return;
+
+    const remaining = [];
+
+    for (const ball of this.cricketBalls) {
+      if (!ball.sprite.active) {
+        continue;
+      }
+
+      const move = ball.speed * (delta / 1000);
+      ball.sprite.x += ball.direction.x * move;
+      ball.sprite.y += ball.direction.y * move;
+      ball.sprite.angle += 720 * (delta / 1000);
+
+      const cellX = this.worldToCell(ball.sprite.x, this.boardOffsetX);
+      const cellY = this.worldToCell(ball.sprite.y, this.boardOffsetY);
+      if (!this.canMove(cellX, cellY)) {
+        ball.sprite.destroy();
+        continue;
+      }
+
+      const dist = Phaser.Math.Distance.Between(
+        this.playerAgent.sprite.x,
+        this.playerAgent.sprite.y,
+        ball.sprite.x,
+        ball.sprite.y
+      );
+      if (!this.invulnerable && dist < this.tileSize * 0.55) {
+        ball.sprite.destroy();
+        this.handlePlayerCaught();
+        return;
+      }
+
+      remaining.push(ball);
+    }
+
+    this.cricketBalls = remaining;
   }
 
   /* ------------------------------------------------------------------ */
@@ -584,7 +634,7 @@ class GameScene extends Phaser.Scene {
     if ((time - this.lastAnySpecialAt) < this.minSpecialGapMs) return;
 
     for (const hunter of this.hunters) {
-      if (hunter.isSprinting || hunter.isTeleporting) continue;
+      if (hunter.isSprinting || hunter.isTeleporting || hunter.isPhasing) continue;
 
       const dist = Phaser.Math.Distance.Between(
         hunter.sprite.x,
@@ -603,6 +653,25 @@ class GameScene extends Phaser.Scene {
           this.triggerFireSequence(hunter, fireDirection, time);
           return;
         }
+        continue;
+      }
+
+      if (hunter.type === "D") {
+        const throwDirection = this.getFireDirection(hunter);
+        if (
+          throwDirection
+          && dist > this.tileSize * 2.5
+          && (time - hunter.lastSpecialTime) > hunter.specialCooldown
+        ) {
+          this.triggerMahiThrowSequence(hunter, throwDirection, time);
+          return;
+        }
+
+        if (dist > this.tileSize * 4 && (time - hunter.lastSpecialTime) > hunter.specialCooldown) {
+          this.triggerMahiPhasingSequence(hunter, time);
+          return;
+        }
+
         continue;
       }
 
@@ -707,6 +776,56 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  triggerMahiThrowSequence(hunter, direction, time) {
+    hunter.lastSpecialTime = time;
+    this.lastAnySpecialAt = time;
+    hunter.direction = { x: 0, y: 0 };
+    hunter.moving = false;
+    hunter.decisionAt = time + 220;
+
+    this.sound.play("mahi_throw_audio");
+    this.spawnCricketBallProjectile(hunter, direction);
+
+    this.tweens.add({
+      targets: hunter.sprite,
+      scaleX: hunter.baseScaleX * 1.1,
+      scaleY: hunter.baseScaleY * 1.1,
+      duration: 100,
+      yoyo: true,
+      onComplete: () => {
+        hunter.sprite.setScale(hunter.baseScaleX, hunter.baseScaleY);
+      },
+    });
+  }
+
+  triggerMahiPhasingSequence(hunter, time) {
+    hunter.lastSpecialTime = time;
+    this.lastAnySpecialAt = time;
+    hunter.isPhasing = true;
+    hunter.direction = { x: 0, y: 0 };
+    hunter.moving = false;
+    hunter.decisionAt = this.time.now;
+
+    this.stopHunterPhaseAudio(hunter);
+    hunter.phaseAudio = this.sound.add("mahi_phase_audio", { loop: true, volume: 0.6 });
+    hunter.phaseAudio.play();
+
+    this.tweens.add({
+      targets: hunter.sprite,
+      alpha: 0.55,
+      duration: 220,
+      yoyo: true,
+      repeat: 7,
+    });
+
+    this.time.delayedCall(4200, () => {
+      if (!hunter.sprite.active) return;
+      hunter.isPhasing = false;
+      hunter.sprite.setAlpha(1);
+      this.stopHunterPhaseAudio(hunter);
+    });
+  }
+
   spawnFireProjectile(hunter, direction) {
     const projectile = this.add.sprite(
       hunter.sprite.x + direction.x * (this.tileSize * 0.7),
@@ -722,6 +841,22 @@ class GameScene extends Phaser.Scene {
       sprite: projectile,
       direction: { ...direction },
       speed: 260,
+    });
+  }
+
+  spawnCricketBallProjectile(hunter, direction) {
+    const projectile = this.add.sprite(
+      hunter.sprite.x + direction.x * (this.tileSize * 0.7),
+      hunter.sprite.y + direction.y * (this.tileSize * 0.7),
+      "cricket_ball"
+    ).setDepth(5);
+
+    projectile.setDisplaySize(22, 22);
+
+    this.cricketBalls.push({
+      sprite: projectile,
+      direction: { ...direction },
+      speed: 300,
     });
   }
 
@@ -746,7 +881,9 @@ class GameScene extends Phaser.Scene {
     if (this.invulnerable || this.transitioning || this.gameOver) return;
 
     this.clearFireProjectiles();
+    this.clearCricketBalls();
     this.lives -= 1;
+    this.sound.play("minecraft_damage");
     this.refreshHud();
 
     if (this.lives <= 0) {
@@ -790,7 +927,9 @@ class GameScene extends Phaser.Scene {
       h.moving = false;
       h.isSprinting = false;
       h.isTeleporting = false;
+      h.isPhasing = false;
       h.decisionAt = this.time.now + 300;
+      this.stopHunterPhaseAudio(h);
       this.tweens.killTweensOf(h.sprite);
       h.sprite
         .setPosition(this.gridToWorld(h.cellX), this.gridToWorldY(h.cellY))
@@ -846,6 +985,7 @@ class GameScene extends Phaser.Scene {
     a.sprite.setPosition(this.gridToWorld(a.cellX), this.gridToWorldY(a.cellY));
     this.updatePlayerVisualState();
     this.clearFireProjectiles();
+    this.clearCricketBalls();
     this.removeSixtySevenMeme();
 
     for (const h of this.hunters) {
@@ -853,6 +993,8 @@ class GameScene extends Phaser.Scene {
       h.moving = false;
       h.isSprinting = false;
       h.isTeleporting = false;
+      h.isPhasing = false;
+      this.stopHunterPhaseAudio(h);
       this.tweens.killTweensOf(h.sprite);
       h.sprite.setPosition(this.gridToWorld(h.cellX), this.gridToWorldY(h.cellY));
       h.sprite.setScale(h.baseScaleX, h.baseScaleY).setAngle(0).setVisible(true);
@@ -893,6 +1035,18 @@ class GameScene extends Phaser.Scene {
     if (cellX < 0 || cellY < 0 || cellX >= this.gridWidth || cellY >= this.gridHeight) {
       return false;
     }
+    return this.levelLayout[cellY][cellX] !== "#";
+  }
+
+  canHunterMove(hunter, cellX, cellY) {
+    if (cellX < 0 || cellY < 0 || cellX >= this.gridWidth || cellY >= this.gridHeight) {
+      return false;
+    }
+
+    if (hunter.isPhasing) {
+      return true;
+    }
+
     return this.levelLayout[cellY][cellX] !== "#";
   }
 
@@ -947,7 +1101,26 @@ class GameScene extends Phaser.Scene {
     this.fireProjectiles = [];
   }
 
-  findPathStep(start, goal) {
+  clearCricketBalls() {
+    for (const ball of this.cricketBalls) {
+      if (ball.sprite?.active) {
+        ball.sprite.destroy();
+      }
+    }
+    this.cricketBalls = [];
+  }
+
+  stopHunterPhaseAudio(hunter) {
+    if (!hunter.phaseAudio) return;
+
+    if (hunter.phaseAudio.isPlaying) {
+      hunter.phaseAudio.stop();
+    }
+    hunter.phaseAudio.destroy();
+    hunter.phaseAudio = null;
+  }
+
+  findPathStep(start, goal, hunter) {
     if (start.x === goal.x && start.y === goal.y) return null;
 
     const queue = [{ x: start.x, y: start.y }];
@@ -970,7 +1143,7 @@ class GameScene extends Phaser.Scene {
         const ny = current.y + dir.y;
         const nk = `${nx},${ny}`;
 
-        if (visited.has(nk) || !this.canMove(nx, ny)) continue;
+        if (visited.has(nk) || !this.canHunterMove(hunter, nx, ny)) continue;
 
         visited.add(nk);
         cameFrom.set(nk, { x: current.x, y: current.y });
@@ -1087,6 +1260,10 @@ class GameScene extends Phaser.Scene {
 
   shutdownGameScene() {
     this.clearFireProjectiles();
+    this.clearCricketBalls();
+    for (const hunter of this.hunters || []) {
+      this.stopHunterPhaseAudio(hunter);
+    }
     this.removeSixtySevenMeme();
   }
 
