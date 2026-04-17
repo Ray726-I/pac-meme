@@ -1,9 +1,11 @@
 class GameScene extends Phaser.Scene {
   constructor() {
     super("GameScene");
-    this.tileSize = 32;
-    this.gridWidth = 20;
-    this.gridHeight = 20;
+    this.tileSize = 34;
+    this.gridWidth = 0;
+    this.gridHeight = 0;
+    this.boardOffsetX = 0;
+    this.boardOffsetY = 0;
     this.basePlayerSpeed = 160;
     this.baseHunterSpeed = 100;
   }
@@ -29,6 +31,15 @@ class GameScene extends Phaser.Scene {
     this.cursors = this.input.keyboard.createCursorKeys();
 
     this.levelLayout = window.GameLevels[this.level] || window.GameLevels[2];
+    this.gridHeight = this.levelLayout.length;
+    this.gridWidth = this.levelLayout[0]?.length || 0;
+
+    const playfieldWidth = this.gridWidth * this.tileSize;
+    const playfieldHeight = this.gridHeight * this.tileSize;
+    const hudHeight = 78;
+
+    this.boardOffsetX = Math.floor((this.scale.width - playfieldWidth) / 2);
+    this.boardOffsetY = Math.max(10, Math.floor((this.scale.height - hudHeight - playfieldHeight) / 2));
 
     this.pelletByCell = new Map();
     this.playerSpawnCell = { x: 7, y: 7 };
@@ -86,7 +97,7 @@ class GameScene extends Phaser.Scene {
       for (let col = 0; col < this.gridWidth; col++) {
         const cell = this.levelLayout[row][col];
         const wx = this.gridToWorld(col);
-        const wy = this.gridToWorld(row);
+        const wy = this.gridToWorldY(row);
 
         if (cell === "#") {
           // Walls are drawn later mathematically
@@ -102,7 +113,7 @@ class GameScene extends Phaser.Scene {
     }
 
     if (this.hunterSpawnCells.length === 0) {
-      this.hunterSpawnCells.push({ x: 10, y: 10, type: "H" });
+      this.hunterSpawnCells.push({ x: Math.floor(this.gridWidth / 2), y: Math.floor(this.gridHeight / 2), type: "H" });
     }
 
     this.drawTubularWalls();
@@ -132,13 +143,16 @@ class GameScene extends Phaser.Scene {
         const y = row * ts;
         const size = ts - 2 * margin;
 
-        gfx.fillRoundedRect(x + margin, y + margin, size, size, cornerRadius);
+        const ox = this.boardOffsetX + x;
+        const oy = this.boardOffsetY + y;
+
+        gfx.fillRoundedRect(ox + margin, oy + margin, size, size, cornerRadius);
 
         const half = ts / 2;
-        if (isW(col, row - 1)) gfx.fillRect(x + margin, y, size, half);
-        if (isW(col, row + 1)) gfx.fillRect(x + margin, y + half, size, half);
-        if (isW(col - 1, row)) gfx.fillRect(x, y + margin, half, size);
-        if (isW(col + 1, row)) gfx.fillRect(x + half, y + margin, half, size);
+        if (isW(col, row - 1)) gfx.fillRect(ox + margin, oy, size, half);
+        if (isW(col, row + 1)) gfx.fillRect(ox + margin, oy + half, size, half);
+        if (isW(col - 1, row)) gfx.fillRect(ox, oy + margin, half, size);
+        if (isW(col + 1, row)) gfx.fillRect(ox + half, oy + margin, half, size);
       }
     }
   }
@@ -149,7 +163,7 @@ class GameScene extends Phaser.Scene {
 
   createActors() {
     const px = this.gridToWorld(this.playerSpawnCell.x);
-    const py = this.gridToWorld(this.playerSpawnCell.y);
+    const py = this.gridToWorldY(this.playerSpawnCell.y);
 
     this.playerAgent = {
       sprite: this.add.sprite(px, py, "player_idle").setDepth(4),
@@ -164,7 +178,7 @@ class GameScene extends Phaser.Scene {
 
     this.hunters = this.hunterSpawnCells.map((spawn, i) => {
       const sx = this.gridToWorld(spawn.x);
-      const sy = this.gridToWorld(spawn.y);
+      const sy = this.gridToWorldY(spawn.y);
 
       let spriteKey = "hunter";
       if (spawn.type === "C") {
@@ -213,17 +227,20 @@ class GameScene extends Phaser.Scene {
       strokeThickness: 4,
     };
 
-    this.scoreText = this.add.text(20, 655, "", this.hudStyle).setDepth(6);
-    this.levelText = this.add.text(200, 655, "", this.hudStyle).setDepth(6);
+    const hudY = this.scale.height - 40;
+    this.scoreText = this.add.text(this.boardOffsetX, hudY, "", this.hudStyle).setDepth(6);
+    this.levelText = this.add.text(this.scale.width / 2 - 48, hudY, "", this.hudStyle).setDepth(6);
 
     this.livesIcons = [];
+    const livesStartX = this.boardOffsetX + this.gridWidth * this.tileSize - 120;
     for (let i = 0; i < 3; i++) {
-      const heart = this.add.image(520 + i * 40, 668, "heart").setDepth(6);
+      const heart = this.add.image(livesStartX + i * 40, hudY + 13, "heart").setDepth(6);
       this.livesIcons.push(heart);
     }
 
+    const centerY = this.boardOffsetY + (this.gridHeight * this.tileSize) / 2;
     this.noticeText = this.add
-      .text(this.scale.width / 2, (this.scale.height - 60) / 2, "", {
+      .text(this.scale.width / 2, centerY, "", {
         fontFamily: "Trebuchet MS",
         fontSize: "34px",
         color: "#f8fafc",
@@ -425,7 +442,7 @@ class GameScene extends Phaser.Scene {
     const move = speed * (delta / 1000);
 
     const targetX = this.gridToWorld(agent.cellX + agent.direction.x);
-    const targetY = this.gridToWorld(agent.cellY + agent.direction.y);
+    const targetY = this.gridToWorldY(agent.cellY + agent.direction.y);
 
     const dx = targetX - agent.sprite.x;
     const dy = targetY - agent.sprite.y;
@@ -437,7 +454,7 @@ class GameScene extends Phaser.Scene {
       agent.cellY += agent.direction.y;
       agent.sprite.setPosition(
         this.gridToWorld(agent.cellX),
-        this.gridToWorld(agent.cellY)
+        this.gridToWorldY(agent.cellY)
       );
       agent.moving = false;
     } else {
@@ -549,7 +566,7 @@ class GameScene extends Phaser.Scene {
           const targetCell = this.findSafeCellNear(this.playerAgent.cellX, this.playerAgent.cellY, 3, 5);
           hunter.cellX = targetCell.x;
           hunter.cellY = targetCell.y;
-          hunter.sprite.setPosition(this.gridToWorld(targetCell.x), this.gridToWorld(targetCell.y));
+          hunter.sprite.setPosition(this.gridToWorld(targetCell.x), this.gridToWorldY(targetCell.y));
           hunter.direction = { x: 0, y: 0 };
           hunter.moving = false;
 
@@ -624,7 +641,7 @@ class GameScene extends Phaser.Scene {
     a.cellY = this.playerSpawnCell.y;
     a.direction = { x: 0, y: 0 };
     a.moving = false;
-    a.sprite.setPosition(this.gridToWorld(a.cellX), this.gridToWorld(a.cellY));
+    a.sprite.setPosition(this.gridToWorld(a.cellX), this.gridToWorldY(a.cellY));
     this.updatePlayerVisualState();
   }
 
@@ -635,7 +652,7 @@ class GameScene extends Phaser.Scene {
       h.direction = { x: 0, y: 0 };
       h.moving = false;
       h.decisionAt = this.time.now + 300;
-      h.sprite.setPosition(this.gridToWorld(h.cellX), this.gridToWorld(h.cellY));
+      h.sprite.setPosition(this.gridToWorld(h.cellX), this.gridToWorldY(h.cellY));
     }
   }
 
@@ -652,8 +669,8 @@ class GameScene extends Phaser.Scene {
     this.showNotice(`Level ${this.level} Cleared`);
 
     this.time.delayedCall(1200, () => {
-      this.scene.restart({
-        level: this.level + 1,
+      this.scene.start("LevelClearedScene", {
+        level: this.level, // Intentionally sending the current level (NOT implicitly skipped to next)
         score: this.score,
         highScore: this.highScore,
         lives: this.lives,
@@ -680,13 +697,13 @@ class GameScene extends Phaser.Scene {
     const a = this.playerAgent;
     a.direction = { x: 0, y: 0 };
     a.moving = false;
-    a.sprite.setPosition(this.gridToWorld(a.cellX), this.gridToWorld(a.cellY));
+    a.sprite.setPosition(this.gridToWorld(a.cellX), this.gridToWorldY(a.cellY));
     this.updatePlayerVisualState();
 
     for (const h of this.hunters) {
       h.direction = { x: 0, y: 0 };
       h.moving = false;
-      h.sprite.setPosition(this.gridToWorld(h.cellX), this.gridToWorld(h.cellY));
+      h.sprite.setPosition(this.gridToWorld(h.cellX), this.gridToWorldY(h.cellY));
     }
   }
 
@@ -709,7 +726,11 @@ class GameScene extends Phaser.Scene {
   }
 
   gridToWorld(cell) {
-    return cell * this.tileSize + this.tileSize / 2;
+    return this.boardOffsetX + cell * this.tileSize + this.tileSize / 2;
+  }
+
+  gridToWorldY(cell) {
+    return this.boardOffsetY + cell * this.tileSize + this.tileSize / 2;
   }
 
   canMove(cellX, cellY) {

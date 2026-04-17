@@ -11,6 +11,8 @@ class BootScene extends Phaser.Scene {
     });
     this.load.audio("player_audio", "assets/player.mp3");
 
+    this.load.video("modi_video", "assets/wah_modiji_wah.mp4");
+
     this.load.image("chin_tapak", "assets/hunters/chin_tapak_dum_dum.png");
     this.load.audio("chin_audio", "assets/hunter-audio/chin_tapak_dum_dum.mp3");
 
