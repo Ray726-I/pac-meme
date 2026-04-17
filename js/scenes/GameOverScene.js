@@ -18,19 +18,19 @@ class GameOverScene extends Phaser.Scene {
       .setDepth(8);
 
     this.add.text(cx, cy - 60, "Game Over", {
-      fontFamily: "Trebuchet MS",
+      fontFamily: 'PacFont',
       fontSize: "40px",
       color: "#f8fafc",
     }).setOrigin(0.5).setDepth(9);
 
     this.add.text(cx, cy - 10, `Score: ${this.score}`, {
-      fontFamily: "Trebuchet MS",
+      fontFamily: 'PacFont',
       fontSize: "24px",
       color: "#e2e8f0",
     }).setOrigin(0.5).setDepth(9);
 
     const tryAgainBtn = this.add.text(cx - 90, cy + 60, "Try Again", {
-      fontFamily: "Trebuchet MS",
+      fontFamily: 'PacFont',
       fontSize: "24px",
       color: "#bae6fd",
     })
@@ -39,7 +39,7 @@ class GameOverScene extends Phaser.Scene {
       .setDepth(9);
 
     const newGameBtn = this.add.text(cx + 90, cy + 60, "New Game", {
-      fontFamily: "Trebuchet MS",
+      fontFamily: 'PacFont',
       fontSize: "24px",
       color: "#facc15",
     })

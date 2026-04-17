@@ -6,6 +6,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Pac Meme Starter</title>
   <style>
+    @font-face {
+      font-family: 'PacFont';
+      src: url('assets/font-style/pacman.ttf');
+    }
+
     * {
       box-sizing: border-box;
     }
@@ -16,7 +21,7 @@
       display: grid;
       place-items: center;
       background: radial-gradient(circle at top, #1e293b, #020617 68%);
-      font-family: "Trebuchet MS", Verdana, sans-serif;
+      font-family: 'PacFont', "Trebuchet MS", sans-serif;
       color: #e2e8f0;
     }
 
@@ -78,6 +83,7 @@
   <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.js"></script>
   <script src="js/levels/Level1.js"></script>
   <script src="js/scenes/BootScene.js"></script>
+  <script src="js/scenes/TitleScene.js"></script>
   <script src="js/scenes/StartScene.js"></script>
   <script src="js/scenes/GameScene.js"></script>
   <script src="js/scenes/GameOverScene.js"></script>
