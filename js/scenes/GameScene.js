@@ -27,6 +27,7 @@ class GameScene extends Phaser.Scene {
     this.playerRotatingNow = false;
     this.lastAnySpecialAt = -5000;
     this.minSpecialGapMs = 5000;
+    this.minAagTriggerDistanceTiles = 3.5;
   }
 
   create() {
@@ -581,7 +582,11 @@ class GameScene extends Phaser.Scene {
 
       if (hunter.type === "A") {
         const fireDirection = this.getFireDirection(hunter);
-        if (dist > this.tileSize * 2.5 && fireDirection && (time - hunter.lastSpecialTime) > hunter.specialCooldown) {
+        if (
+          dist > this.tileSize * this.minAagTriggerDistanceTiles
+          && fireDirection
+          && (time - hunter.lastSpecialTime) > hunter.specialCooldown
+        ) {
           this.triggerFireSequence(hunter, fireDirection, time);
           return;
         }
