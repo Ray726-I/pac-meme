@@ -22,6 +22,8 @@ class GameScene extends Phaser.Scene {
     this.fireProjectiles = [];
     this.nextDirection = { x: 0, y: 0 };
     this.playerSoundEnabled = true;
+    this.playerAudioPlayCount = 0;
+    this.playerAudioReplayTimer = null;
     this.lastAnySpecialAt = -5000;
     this.minSpecialGapMs = 5000;
     this.minAagTriggerDistanceTiles = 3.5;
@@ -61,7 +63,6 @@ class GameScene extends Phaser.Scene {
 
   initPlayerAudio() {
     this.playerAudio = this.sound.add("player_audio", {
-      loop: true,
       volume: 0.25,
     });
 
@@ -71,6 +72,11 @@ class GameScene extends Phaser.Scene {
 
   teardownPlayerAudio() {
     if (!this.playerAudio) return;
+
+    if (this.playerAudioReplayTimer) {
+      this.playerAudioReplayTimer.remove(false);
+      this.playerAudioReplayTimer = null;
+    }
 
     if (this.playerAudio.isPlaying) {
       this.playerAudio.stop();
@@ -350,23 +356,56 @@ class GameScene extends Phaser.Scene {
     if (!this.playerAudio) return;
 
     if (!this.playerSoundEnabled) {
-      if (this.playerAudio.isPlaying) {
-        this.playerAudio.stop();
-      }
+      this.stopPlayerAudio();
       return;
     }
 
-    const shouldPlay = this.playerAgent.moving;
-
-    if (shouldPlay) {
-      if (!this.playerAudio.isPlaying) {
-        this.playerAudio.play();
-      }
+    if (!this.playerAgent.moving) {
+      this.stopPlayerAudio();
       return;
     }
 
-    if (this.playerAudio.isPlaying) {
+    if (this.playerAudio.isPlaying || this.playerAudioReplayTimer) return;
+
+    this.playPlayerAudio();
+  }
+
+  playPlayerAudio() {
+    if (!this.playerAudio || !this.playerAgent?.moving) return;
+
+    const speeds = [1, 0.75, 0.5, 0.4];
+    const rate = speeds[Math.min(this.playerAudioPlayCount, speeds.length - 1)];
+
+    this.playerAudio.setRate(rate);
+    this.playerAudio.play();
+    this.playerAudioPlayCount += 1;
+
+    this.playerAudio.once("complete", () => {
+      if (!this.playerAudio || !this.playerAgent?.moving || !this.playerSoundEnabled) return;
+
+      this.playerAudioReplayTimer = this.time.delayedCall(1000, () => {
+        this.playerAudioReplayTimer = null;
+        if (this.playerAgent?.moving && this.playerSoundEnabled) {
+          this.playPlayerAudio();
+        }
+      });
+    });
+  }
+
+  stopPlayerAudio() {
+    this.playerAudioPlayCount = 0;
+
+    if (this.playerAudioReplayTimer) {
+      this.playerAudioReplayTimer.remove(false);
+      this.playerAudioReplayTimer = null;
+    }
+
+    if (this.playerAudio?.isPlaying) {
       this.playerAudio.stop();
+    }
+
+    if (this.playerAudio) {
+      this.playerAudio.setRate(1);
     }
   }
 
