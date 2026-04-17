@@ -21,9 +21,8 @@
     }
 
     .shell {
-      width: 100%;
-      max-width: 720px;
-      padding: 20px;
+      width: min(98vw, 820px);
+      padding: 12px;
     }
 
     .title {
@@ -35,8 +34,9 @@
     }
 
     #game-container {
-      width: min(92vw, 640px);
-      aspect-ratio: 640 / 700;
+      width: 100%;
+      max-height: 92vh;
+      aspect-ratio: 760 / 820;
       margin: 0 auto;
       outline: 2px solid #334155;
       box-shadow: 0 14px 30px rgba(0, 0, 0, 0.45);
@@ -62,7 +62,7 @@
       }
 
       #game-container {
-        width: min(92vw, 640px);
+        width: 100%;
       }
     }
   </style>
@@ -81,6 +81,7 @@
   <script src="js/scenes/StartScene.js"></script>
   <script src="js/scenes/GameScene.js"></script>
   <script src="js/scenes/GameOverScene.js"></script>
+  <script src="js/scenes/LevelClearedScene.js"></script>
   <script src="js/main.js"></script>
 </body>
 
