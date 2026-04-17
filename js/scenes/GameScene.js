@@ -27,6 +27,9 @@ class GameScene extends Phaser.Scene {
     this.playerRotatingNow = false;
     this.lastAnySpecialAt = -5000;
     this.minSpecialGapMs = 5000;
+
+    this.parlegs = [];
+    this.flashbangActive = false;
   }
 
   create() {
@@ -59,6 +62,15 @@ class GameScene extends Phaser.Scene {
 
     // Remove pellet under the player at start
     this.collectPelletAt(this.playerAgent.cellX, this.playerAgent.cellY);
+
+    this.parlegSpawnTimer = this.time.addEvent({
+      delay: 15000,
+      callback: this.spawnParleg,
+      callbackScope: this,
+      loop: true,
+    });
+    this.events.once("shutdown", this.cleanupParlegs, this);
+    this.events.once("destroy", this.cleanupParlegs, this);
   }
 
   initPlayerAudio() {
@@ -88,12 +100,18 @@ class GameScene extends Phaser.Scene {
 
     if (this.transitioning) return;
 
-    this.readPlayerInput();
-    this.movePlayer(delta);
+    if (!this.flashbangActive) {
+      this.readPlayerInput();
+      this.movePlayer(delta);
+    } else {
+      this.playerAgent.moving = false;
+      this.updatePlayerVisualState();
+    }
     this.checkSpecialTriggers(time);
     this.moveHunters(delta, time);
     this.updateFireProjectiles(delta);
     this.checkHunterContact();
+    this.checkParlegContact();
   }
 
   /* ------------------------------------------------------------------ */
@@ -446,6 +464,9 @@ class GameScene extends Phaser.Scene {
         if (hunter.isSprinting) {
           speed = 180;
         }
+        if (this.flashbangActive) {
+          speed = Math.max(10, speed - 70);
+        }
         this.advanceAgent(hunter, delta, speed);
       }
     }
@@ -467,7 +488,7 @@ class GameScene extends Phaser.Scene {
 
       const cellX = this.worldToCell(projectile.sprite.x, this.boardOffsetX);
       const cellY = this.worldToCell(projectile.sprite.y, this.boardOffsetY);
-      if (!this.canMove(cellX, cellY)) {
+      if (cellX < 0 || cellY < 0 || cellX >= this.gridWidth || cellY >= this.gridHeight) {
         projectile.sprite.destroy();
         continue;
       }
@@ -988,6 +1009,91 @@ class GameScene extends Phaser.Scene {
 
     this.livesIcons.forEach((icon, index) => {
       icon.setVisible(index < this.lives);
+    });
+  }
+
+  spawnParleg() {
+    if (this.gameOver || this.transitioning) return;
+    
+    let validCells = [];
+    for (let r = 0; r < this.gridHeight; r++) {
+      for (let c = 0; c < this.gridWidth; c++) {
+        if (this.canMove(c, r)) {
+          validCells.push({ x: c, y: r });
+        }
+      }
+    }
+    
+    if (validCells.length > 0) {
+      const cell = Phaser.Utils.Array.GetRandom(validCells);
+      const wx = this.gridToWorld(cell.x);
+      const wy = this.gridToWorldY(cell.y);
+      const parleg = this.add.image(wx, wy, "parleg").setDepth(3);
+      parleg.setDisplaySize(30, 30);
+      this.parlegs.push({ sprite: parleg, cellX: cell.x, cellY: cell.y });
+    }
+  }
+
+  cleanupParlegs() {
+    if (this.parlegSpawnTimer) {
+      this.parlegSpawnTimer.destroy();
+      this.parlegSpawnTimer = null;
+    }
+    for (const p of this.parlegs) {
+      if (p.sprite && p.sprite.active) p.sprite.destroy();
+    }
+    this.parlegs = [];
+    if (this.flashbangVideo && this.flashbangVideo.active) {
+      this.flashbangVideo.destroy();
+    }
+  }
+
+  checkParlegContact() {
+    if (this.gameOver || this.transitioning) return;
+    
+    const remaining = [];
+    for (const p of this.parlegs) {
+      if (!p.sprite.active) continue;
+      
+      const dist = Phaser.Math.Distance.Between(
+        this.playerAgent.sprite.x,
+        this.playerAgent.sprite.y,
+        p.sprite.x,
+        p.sprite.y
+      );
+      
+      if (dist < this.tileSize * 0.55) {
+        p.sprite.destroy();
+        
+        if (Math.random() < 0.5) {
+          if (this.lives < 3) {
+            this.lives += 1;
+            this.refreshHud();
+          }
+        } else {
+          this.playFlashbang();
+        }
+      } else {
+        remaining.push(p);
+      }
+    }
+    this.parlegs = remaining;
+  }
+
+  playFlashbang() {
+    if (this.flashbangActive) return;
+    
+    this.flashbangActive = true;
+    
+    this.flashbangVideo = this.add.video(this.scale.width / 2, this.scale.height / 2, "flashbang").setDepth(100);
+    this.flashbangVideo.setDisplaySize(this.scale.width, this.scale.height);
+    this.flashbangVideo.play();
+    
+    this.flashbangVideo.on('complete', () => {
+      this.flashbangActive = false;
+      if (this.flashbangVideo) {
+        this.flashbangVideo.destroy();
+      }
     });
   }
 

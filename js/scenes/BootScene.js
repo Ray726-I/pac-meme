@@ -24,6 +24,8 @@ class BootScene extends Phaser.Scene {
       frameWidth: 72,
       frameHeight: 96,
     });
+    this.load.image("parleg", "assets/parleg.png");
+    this.load.video("flashbang", "assets/flashbang.mp4");
   }
 
   create() {
