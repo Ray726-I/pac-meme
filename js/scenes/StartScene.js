@@ -16,7 +16,7 @@ class StartScene extends Phaser.Scene {
     };
 
     this.add.text(cx, cy - 80, "Pac-Meme", {
-      fontFamily: "Trebuchet MS",
+      fontFamily: 'PacFont',
       fontSize: "56px",
       color: "#facc15",
       stroke: "#020617",
@@ -24,7 +24,7 @@ class StartScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     const playBtn = this.add.text(cx, cy + 24, "Play Level 1", {
-      fontFamily: "Trebuchet MS",
+      fontFamily: 'PacFont',
       fontSize: "34px",
       color: "#f8fafc",
       stroke: "#020617",
@@ -34,7 +34,7 @@ class StartScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
 
     const playLevel2Btn = this.add.text(cx, cy + 90, "Play Another Level (2)", {
-      fontFamily: "Trebuchet MS",
+      fontFamily: 'PacFont',
       fontSize: "26px",
       color: "#bae6fd",
       stroke: "#020617",

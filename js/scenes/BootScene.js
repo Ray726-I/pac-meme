@@ -30,7 +30,7 @@ class BootScene extends Phaser.Scene {
     this.createGeneratedTextures();
     this.createPlayerAnimations();
     this.createHunterAnimations();
-    this.scene.start("StartScene");
+    this.scene.start("TitleScene");
   }
 
   createPlayerAnimations() {

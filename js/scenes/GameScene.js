@@ -240,7 +240,7 @@ class GameScene extends Phaser.Scene {
 
   createHud() {
     this.hudStyle = {
-      fontFamily: "Trebuchet MS",
+      fontFamily: 'PacFont',
       fontSize: "20px",
       color: "#e2e8f0",
       stroke: "#020617",
@@ -373,12 +373,7 @@ class GameScene extends Phaser.Scene {
   playPlayerAudio() {
     if (!this.playerAudio || !this.playerAgent?.moving) return;
 
-    const speeds = [1, 0.75, 0.5, 0.4];
-    const rate = speeds[Math.min(this.playerAudioPlayCount, speeds.length - 1)];
-
-    this.playerAudio.setRate(rate);
     this.playerAudio.play();
-    this.playerAudioPlayCount += 1;
 
     this.playerAudio.once("complete", () => {
       if (!this.playerAudio || !this.playerAgent?.moving || !this.playerSoundEnabled) return;
@@ -393,8 +388,6 @@ class GameScene extends Phaser.Scene {
   }
 
   stopPlayerAudio() {
-    this.playerAudioPlayCount = 0;
-
     if (this.playerAudioReplayTimer) {
       this.playerAudioReplayTimer.remove(false);
       this.playerAudioReplayTimer = null;
@@ -402,10 +395,6 @@ class GameScene extends Phaser.Scene {
 
     if (this.playerAudio?.isPlaying) {
       this.playerAudio.stop();
-    }
-
-    if (this.playerAudio) {
-      this.playerAudio.setRate(1);
     }
   }
 
@@ -813,20 +802,9 @@ class GameScene extends Phaser.Scene {
     this.updateHighScore(this.score);
     this.showNotice(`Level ${this.level} Cleared`);
 
-    const nextScene = this.level <= 2 ? "GameScene" : "LevelClearedScene";
     this.time.delayedCall(1200, () => {
-      if (nextScene === "GameScene") {
-        this.scene.start("GameScene", {
-          level: this.level + 1,
-          score: this.score,
-          highScore: this.highScore,
-          lives: this.lives,
-        });
-        return;
-      }
-
       this.scene.start("LevelClearedScene", {
-        level: this.level, // Intentionally sending the current level (NOT implicitly skipped to next)
+        level: this.level,
         score: this.score,
         highScore: this.highScore,
         lives: this.lives,
