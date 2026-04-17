@@ -703,7 +703,7 @@ class GameScene extends Phaser.Scene {
     this.fireProjectiles.push({
       sprite: projectile,
       direction: { ...direction },
-      speed: 260,
+      speed: 240,
     });
   }
 
