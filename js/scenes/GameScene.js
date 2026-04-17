@@ -27,14 +27,18 @@ class GameScene extends Phaser.Scene {
     this.lastAnySpecialAt = -5000;
     this.minSpecialGapMs = 5000;
     this.minAagTriggerDistanceTiles = 3.5;
+    this._sixtySevenVideos = [];
   }
 
   create() {
     this.cursors = this.input.keyboard.createCursorKeys();
 
-    this.levelLayout = window.GameLevels[this.level] || window.GameLevels[2];
-    if (this.level === 2) {
-      this.minSpecialGapMs = 2000;
+    this.levelLayout = window.GameLevels[this.level] || window.GameLevels[1];
+    // Higher levels → shorter gap between hunter specials
+    if (this.level >= 4) {
+      this.minSpecialGapMs = 1500;
+    } else if (this.level >= 2) {
+      this.minSpecialGapMs = 3000;
     }
     this.gridHeight = this.levelLayout.length;
     this.gridWidth = this.levelLayout[0]?.length || 0;
@@ -54,8 +58,8 @@ class GameScene extends Phaser.Scene {
     this.createActors();
     this.createHud();
     this.initPlayerAudio();
-    this.events.once("shutdown", this.clearFireProjectiles, this);
-    this.events.once("destroy", this.clearFireProjectiles, this);
+    this.events.once("shutdown", this.shutdownGameScene, this);
+    this.events.once("destroy", this.shutdownGameScene, this);
 
     // Remove pellet under the player at start
     this.collectPelletAt(this.playerAgent.cellX, this.playerAgent.cellY);
@@ -335,6 +339,7 @@ class GameScene extends Phaser.Scene {
     const sprite = this.playerAgent.sprite;
 
     if (this.playerAgent.moving) {
+      sprite.setDisplaySize(this.tileSize + 35, this.tileSize + 35);
       if (!sprite.anims.isPlaying || sprite.anims.currentAnim?.key !== "player-run") {
         sprite.play("player-run", true);
       }
@@ -342,6 +347,7 @@ class GameScene extends Phaser.Scene {
       return;
     }
 
+    sprite.setDisplaySize(this.tileSize + 15, this.tileSize + 15);
     if (sprite.anims.isPlaying) {
       sprite.stop();
     }
@@ -540,6 +546,10 @@ class GameScene extends Phaser.Scene {
     this.pelletByCell.delete(key);
     this.score += 1;
     this.refreshHud();
+
+    if (this.score % 100 === 67) {
+      this.triggerSixtySevenMeme();
+    }
 
     if (this.pelletByCell.size === 0) {
       this.levelComplete();
@@ -799,6 +809,7 @@ class GameScene extends Phaser.Scene {
 
     this.transitioning = true;
     this.stopAllAgents();
+    this.sound.stopAll();
     this.updateHighScore(this.score);
     this.showNotice(`Level ${this.level} Cleared`);
 
@@ -816,6 +827,7 @@ class GameScene extends Phaser.Scene {
     this.gameOver = true;
     this.stopAllAgents();
     this.updateHighScore(this.score);
+    this.sound.stopAll();
 
     // Transition to the unified Game Over scene instead of drawing it over the active level
     this.time.delayedCall(800, () => {
@@ -834,6 +846,7 @@ class GameScene extends Phaser.Scene {
     a.sprite.setPosition(this.gridToWorld(a.cellX), this.gridToWorldY(a.cellY));
     this.updatePlayerVisualState();
     this.clearFireProjectiles();
+    this.removeSixtySevenMeme();
 
     for (const h of this.hunters) {
       h.direction = { x: 0, y: 0 };
@@ -977,6 +990,104 @@ class GameScene extends Phaser.Scene {
     }
 
     return step;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  67 Meme Logic                                                      */
+  /* ------------------------------------------------------------------ */
+
+  triggerSixtySevenMeme() {
+    if (!this.scoreText) return;
+
+    // 1. Text Animation
+    const animText = this.add.text(this.scoreText.x, this.scoreText.y, "67", {
+      fontFamily: 'PacFont',
+      fontSize: "24px",
+      color: "#facc15"
+    }).setOrigin(0, 0).setDepth(20);
+
+    this.tweens.add({
+      targets: animText,
+      y: animText.y - 60,
+      scaleX: 2.5,
+      scaleY: 2.5,
+      duration: 1500,
+      ease: "Power2",
+      onUpdate: (tween) => {
+        // Transition color towards red during tween
+        const progress = tween.getValue();
+        if (progress > 0.5) animText.setColor("#ef4444");
+      },
+      onComplete: () => {
+        animText.destroy();
+      }
+    });
+
+    // 2. Play Videos
+    this._spawnSixtySevenVideos();
+  }
+
+  _spawnSixtySevenVideos() {
+    this.removeSixtySevenMeme(); // Purge old ones if overlapping
+
+    const canvas = this.sys.game.canvas;
+    const rect = canvas.getBoundingClientRect();
+
+    const vidW = Math.round(rect.width * 0.35); // 35% of grid width
+    const vidH = Math.round(vidW * (9 / 16));
+    const cy = Math.round(rect.top + (rect.height - vidH) / 2);
+
+    const positions = [
+      rect.left - vidW - 5, // Left of board
+      rect.right + 5        // Right of board
+    ];
+
+    positions.forEach(xPos => {
+      const vid = document.createElement("video");
+      vid.src = "assets/nub-nub-cat-67.mp4";
+      vid.autoplay = true;
+      vid.muted = false;
+      vid.playsInline = true;
+      vid.style.position = "fixed";
+      vid.style.left = xPos + "px";
+      vid.style.top = cy + "px";
+      vid.style.width = vidW + "px";
+      vid.style.height = vidH + "px";
+      vid.style.zIndex = "9999";
+      vid.style.borderRadius = "8px";
+      vid.style.boxShadow = "0 0 15px rgba(239, 68, 68, 0.6)";
+      vid.style.objectFit = "cover";
+
+      let loopCount = 0;
+      const maxLoops = 5;
+
+      vid.onended = () => {
+        loopCount++;
+        if (loopCount < maxLoops) {
+          vid.play();
+        } else {
+          vid.remove();
+        }
+      };
+
+      document.body.appendChild(vid);
+      this._sixtySevenVideos.push(vid);
+    });
+  }
+
+  removeSixtySevenMeme() {
+    if (this._sixtySevenVideos) {
+      this._sixtySevenVideos.forEach(vid => {
+        vid.pause();
+        vid.remove();
+      });
+      this._sixtySevenVideos = [];
+    }
+  }
+
+  shutdownGameScene() {
+    this.clearFireProjectiles();
+    this.removeSixtySevenMeme();
   }
 
   refreshHud() {

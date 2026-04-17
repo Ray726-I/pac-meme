@@ -15,40 +15,33 @@ class StartScene extends Phaser.Scene {
       });
     };
 
-    this.add.text(cx, cy - 80, "Pac-Meme", {
+    this.add.text(cx, cy - 160, "Select Level", {
       fontFamily: 'PacFont',
-      fontSize: "56px",
+      fontSize: "42px",
       color: "#facc15",
       stroke: "#020617",
       strokeThickness: 8,
     }).setOrigin(0.5);
 
-    const playBtn = this.add.text(cx, cy + 24, "Play Level 1", {
-      fontFamily: 'PacFont',
-      fontSize: "34px",
-      color: "#f8fafc",
-      stroke: "#020617",
-      strokeThickness: 6,
-    })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
+    const levels = Object.keys(window.GameLevels || {}).map(Number).sort((a, b) => a - b);
 
-    const playLevel2Btn = this.add.text(cx, cy + 90, "Play Another Level (2)", {
-      fontFamily: 'PacFont',
-      fontSize: "26px",
-      color: "#bae6fd",
-      stroke: "#020617",
-      strokeThickness: 5,
-    })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
+    levels.forEach((lvl, index) => {
+      const yPos = cy - 70 + (index * 55);
+      const btn = this.add.text(cx, yPos, `Level ${lvl}`, {
+        fontFamily: 'PacFont',
+        fontSize: "26px",
+        color: "#e2e8f0",
+        stroke: "#020617",
+        strokeThickness: 5,
+        padding: { x: 20, y: 8 },
+        backgroundColor: "#1e293b",
+      })
+        .setOrigin(0.5)
+        .setInteractive({ useHandCursor: true });
 
-    playBtn.on("pointerover", () => playBtn.setColor("#60a5fa"));
-    playBtn.on("pointerout", () => playBtn.setColor("#f8fafc"));
-    playBtn.on("pointerdown", () => startLevel(1));
-
-    playLevel2Btn.on("pointerover", () => playLevel2Btn.setColor("#38bdf8"));
-    playLevel2Btn.on("pointerout", () => playLevel2Btn.setColor("#bae6fd"));
-    playLevel2Btn.on("pointerdown", () => startLevel(2));
+      btn.on("pointerover", () => btn.setBackgroundColor("#334155").setColor("#facc15"));
+      btn.on("pointerout", () => btn.setBackgroundColor("#1e293b").setColor("#e2e8f0"));
+      btn.on("pointerdown", () => startLevel(lvl));
+    });
   }
 }
