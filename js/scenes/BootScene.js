@@ -76,8 +76,9 @@ class BootScene extends Phaser.Scene {
     gfx.generateTexture("heart", 28, 28);
     gfx.clear();
 
-    gfx.fillStyle(0xf8fafc, 1);
-    gfx.fillCircle(5, 5, 4);
+    // Peach/pinkish square pellets from reference image
+    gfx.fillStyle(0xffb8ae, 1);
+    gfx.fillRect(3, 3, 4, 4);
     gfx.generateTexture("pellet", 10, 10);
     gfx.clear();
 

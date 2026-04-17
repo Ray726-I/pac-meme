@@ -138,13 +138,13 @@ class GameScene extends Phaser.Scene {
   drawTubularWalls() {
     const gfx = this.add.graphics().setDepth(1);
 
-    // Outer thick blue tubes
-    gfx.fillStyle(0x1d4ed8, 1);
-    this.drawTubes(gfx, 4, 16);
+    // Outer thick classic blue tubes (from reference)
+    gfx.fillStyle(0x0000ff, 1);
+    this.drawTubes(gfx, 4, 8);
 
-    // Inner black tubes to hollow them out
+    // Inner hollow tubes (matching background)
     gfx.fillStyle(0x0f172a, 1);
-    this.drawTubes(gfx, 8, 12);
+    this.drawTubes(gfx, 8, 4);
   }
 
   drawTubes(gfx, margin, cornerRadius) {

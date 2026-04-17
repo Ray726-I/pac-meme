@@ -19,7 +19,7 @@ class GameOverScene extends Phaser.Scene {
     const cy = H / 2;
 
     // Background for labels
-    this.add.rectangle(cx, cy, W, H, 0x020617).setDepth(0);
+    this.add.rectangle(cx, cy, W, H, 0x0f172a).setDepth(0);
 
     // Create the layers but hide them initially
     this.menuLayer = this.add.container(0, 0).setVisible(false).setDepth(10);
