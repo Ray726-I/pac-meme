@@ -22,9 +22,6 @@ class GameScene extends Phaser.Scene {
     this.fireProjectiles = [];
     this.nextDirection = { x: 0, y: 0 };
     this.playerSoundEnabled = true;
-    this.playerUseRotatingOnlyAnimation = false;
-    this.playerAudioOnlyOnRotatingFrames = true;
-    this.playerRotatingNow = false;
     this.lastAnySpecialAt = -5000;
     this.minSpecialGapMs = 5000;
     this.minAagTriggerDistanceTiles = 3.5;
@@ -332,11 +329,9 @@ class GameScene extends Phaser.Scene {
     const sprite = this.playerAgent.sprite;
 
     if (this.playerAgent.moving) {
-      const nextAnim = this.playerUseRotatingOnlyAnimation ? "player-run-rotating" : "player-run";
-      if (!sprite.anims.isPlaying || sprite.anims.currentAnim?.key !== nextAnim) {
-        sprite.play(nextAnim, true);
+      if (!sprite.anims.isPlaying || sprite.anims.currentAnim?.key !== "player-run") {
+        sprite.play("player-run", true);
       }
-      this.playerRotatingNow = this.isPlayerInRotatingPhase();
       this.updatePlayerAudioState();
       return;
     }
@@ -348,27 +343,7 @@ class GameScene extends Phaser.Scene {
       sprite.setTexture("player_idle");
     }
 
-    this.playerRotatingNow = false;
     this.updatePlayerAudioState();
-  }
-
-  isPlayerInRotatingPhase() {
-    if (!this.playerAgent?.moving) return false;
-
-    const currentKey = this.playerAgent.sprite.anims.currentAnim?.key;
-    if (currentKey === "player-run-rotating") {
-      return true;
-    }
-
-    if (currentKey !== "player-run") {
-      return false;
-    }
-
-    const frame = Number(this.playerAgent.sprite.anims.currentFrame?.textureFrame ?? -1);
-    if (Number.isNaN(frame)) {
-      return false;
-    }
-    return frame >= 24 && frame <= 69;
   }
 
   updatePlayerAudioState() {
@@ -381,7 +356,7 @@ class GameScene extends Phaser.Scene {
       return;
     }
 
-    const shouldPlay = this.playerAgent.moving && (!this.playerAudioOnlyOnRotatingFrames || this.playerRotatingNow);
+    const shouldPlay = this.playerAgent.moving;
 
     if (shouldPlay) {
       if (!this.playerAudio.isPlaying) {
