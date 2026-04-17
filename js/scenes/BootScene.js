@@ -18,11 +18,18 @@ class BootScene extends Phaser.Scene {
 
     this.load.image("max_hunter", "assets/hunters/max.png");
     this.load.audio("max_audio", "assets/hunter-audio/max.mp3");
+    this.load.image("amitabh_aag", "assets/hunters/amitabh-aag.png");
+    this.load.audio("aag_audio", "assets/hunter-audio/aag.mp3");
+    this.load.spritesheet("fire_projectile", "assets/fire_sheet.png", {
+      frameWidth: 72,
+      frameHeight: 96,
+    });
   }
 
   create() {
     this.createGeneratedTextures();
     this.createPlayerAnimations();
+    this.createHunterAnimations();
     this.scene.start("StartScene");
   }
 
@@ -47,6 +54,20 @@ class BootScene extends Phaser.Scene {
           end: 69,
         }),
         frameRate: 24,
+        repeat: -1,
+      });
+    }
+  }
+
+  createHunterAnimations() {
+    if (!this.anims.exists("fire-burn")) {
+      this.anims.create({
+        key: "fire-burn",
+        frames: this.anims.generateFrameNumbers("fire_projectile", {
+          start: 0,
+          end: 5,
+        }),
+        frameRate: 14,
         repeat: -1,
       });
     }

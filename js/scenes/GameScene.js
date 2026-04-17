@@ -19,12 +19,14 @@ class GameScene extends Phaser.Scene {
     this.invulnerable = false;
     this.gameOver = false;
     this.transitioning = false;
-    this.teleporting = false;
+    this.fireProjectiles = [];
     this.nextDirection = { x: 0, y: 0 };
     this.playerSoundEnabled = true;
     this.playerUseRotatingOnlyAnimation = false;
     this.playerAudioOnlyOnRotatingFrames = true;
     this.playerRotatingNow = false;
+    this.lastAnySpecialAt = -5000;
+    this.minSpecialGapMs = 5000;
   }
 
   create() {
@@ -49,6 +51,8 @@ class GameScene extends Phaser.Scene {
     this.createActors();
     this.createHud();
     this.initPlayerAudio();
+    this.events.once("shutdown", this.clearFireProjectiles, this);
+    this.events.once("destroy", this.clearFireProjectiles, this);
 
     // Remove pellet under the player at start
     this.collectPelletAt(this.playerAgent.cellX, this.playerAgent.cellY);
@@ -79,12 +83,13 @@ class GameScene extends Phaser.Scene {
       return;
     }
 
-    if (this.transitioning || this.teleporting) return;
+    if (this.transitioning) return;
 
     this.readPlayerInput();
     this.movePlayer(delta);
     this.checkSpecialTriggers(time);
     this.moveHunters(delta, time);
+    this.updateFireProjectiles(delta);
     this.checkHunterContact();
   }
 
@@ -106,7 +111,7 @@ class GameScene extends Phaser.Scene {
           this.pelletByCell.set(`${col},${row}`, pellet);
         } else if (cell === "P") {
           this.playerSpawnCell = { x: col, y: row };
-        } else if (cell === "H" || cell === "K" || cell === "C" || cell === "M") {
+        } else if (cell === "H" || cell === "K" || cell === "C" || cell === "M" || cell === "A") {
           this.hunterSpawnCells.push({ x: col, y: row, type: cell });
         }
       }
@@ -185,6 +190,8 @@ class GameScene extends Phaser.Scene {
         spriteKey = "chin_tapak";
       } else if (spawn.type === "M") {
         spriteKey = "max_hunter";
+      } else if (spawn.type === "A") {
+        spriteKey = "amitabh_aag";
       }
 
       const sprite = this.add.sprite(sx, sy, spriteKey).setDepth(4);
@@ -193,6 +200,8 @@ class GameScene extends Phaser.Scene {
         sprite.setDisplaySize(46, 46);
       } else if (spriteKey === "max_hunter") {
         sprite.setDisplaySize(35, 35);
+      } else if (spriteKey === "amitabh_aag") {
+        sprite.setDisplaySize(58, 33);
       } else if (spawn.type !== "C" && spawn.type !== "M" && i === 1) {
         sprite.setTint(0xfb923c);
       }
@@ -208,8 +217,12 @@ class GameScene extends Phaser.Scene {
         moving: false,
         speed: this.baseHunterSpeed + (spriteKey === "max_hunter" ? 10 : i * 8),
         decisionAt: 0,
-        lastTeleportTime: -30000,
+        lastSpecialTime: -30000,
         isSprinting: false,
+        isTeleporting: false,
+        baseScaleX: sprite.scaleX,
+        baseScaleY: sprite.scaleY,
+        specialCooldown: spawn.type === "A" ? 6500 : 20000,
       };
     });
   }
@@ -384,6 +397,8 @@ class GameScene extends Phaser.Scene {
 
   moveHunters(delta, time) {
     for (const hunter of this.hunters) {
+      if (hunter.isTeleporting) continue;
+
       // Decide direction when at a cell center (not moving)
       if (!hunter.moving) {
         if (time >= hunter.decisionAt) {
@@ -431,6 +446,45 @@ class GameScene extends Phaser.Scene {
         this.advanceAgent(hunter, delta, speed);
       }
     }
+  }
+
+  updateFireProjectiles(delta) {
+    if (this.fireProjectiles.length === 0) return;
+
+    const remaining = [];
+
+    for (const projectile of this.fireProjectiles) {
+      if (!projectile.sprite.active) {
+        continue;
+      }
+
+      const move = projectile.speed * (delta / 1000);
+      projectile.sprite.x += projectile.direction.x * move;
+      projectile.sprite.y += projectile.direction.y * move;
+
+      const cellX = this.worldToCell(projectile.sprite.x, this.boardOffsetX);
+      const cellY = this.worldToCell(projectile.sprite.y, this.boardOffsetY);
+      if (!this.canMove(cellX, cellY)) {
+        projectile.sprite.destroy();
+        continue;
+      }
+
+      const dist = Phaser.Math.Distance.Between(
+        this.playerAgent.sprite.x,
+        this.playerAgent.sprite.y,
+        projectile.sprite.x,
+        projectile.sprite.y
+      );
+      if (!this.invulnerable && dist < this.tileSize * 0.55) {
+        projectile.sprite.destroy();
+        this.handlePlayerCaught();
+        return;
+      }
+
+      remaining.push(projectile);
+    }
+
+    this.fireProjectiles = remaining;
   }
 
   /* ------------------------------------------------------------------ */
@@ -493,6 +547,8 @@ class GameScene extends Phaser.Scene {
     if (this.invulnerable || this.transitioning || this.gameOver) return;
 
     for (const hunter of this.hunters) {
+      if (hunter.isTeleporting) continue;
+
       const dist = Phaser.Math.Distance.Between(
         this.playerAgent.sprite.x,
         this.playerAgent.sprite.y,
@@ -507,13 +563,29 @@ class GameScene extends Phaser.Scene {
   }
 
   checkSpecialTriggers(time) {
-    if (this.transitioning || this.gameOver || this.teleporting || this.invulnerable) return;
+    if (this.transitioning || this.gameOver || this.invulnerable) return;
+    if ((time - this.lastAnySpecialAt) < this.minSpecialGapMs) return;
 
     for (const hunter of this.hunters) {
-      if (hunter.isSprinting) continue;
+      if (hunter.isSprinting || hunter.isTeleporting) continue;
 
-      const dist = Phaser.Math.Distance.Between(hunter.sprite.x, hunter.sprite.y, this.playerAgent.sprite.x, this.playerAgent.sprite.y);
-      if (dist > 240 && (time - hunter.lastTeleportTime) > 20000) {
+      const dist = Phaser.Math.Distance.Between(
+        hunter.sprite.x,
+        hunter.sprite.y,
+        this.playerAgent.sprite.x,
+        this.playerAgent.sprite.y
+      );
+
+      if (hunter.type === "A") {
+        const fireDirection = this.getFireDirection(hunter);
+        if (dist > this.tileSize * 2.5 && fireDirection && (time - hunter.lastSpecialTime) > hunter.specialCooldown) {
+          this.triggerFireSequence(hunter, fireDirection, time);
+          return;
+        }
+        continue;
+      }
+
+      if (dist > 240 && (time - hunter.lastSpecialTime) > hunter.specialCooldown) {
         if (hunter.type === "C") {
           this.triggerTeleportSequence(hunter, time);
           return;
@@ -526,66 +598,109 @@ class GameScene extends Phaser.Scene {
   }
 
   triggerSprintSequence(hunter, time) {
-    this.teleporting = true; // Use this to pause active logic globally
-    this.stopAllAgents();
+    hunter.lastSpecialTime = time;
+    this.lastAnySpecialAt = time;
+    hunter.direction = { x: 0, y: 0 };
+    hunter.moving = false;
+    hunter.decisionAt = time + 120;
 
     const sfx = this.sound.add("max_audio");
     sfx.once("complete", () => {
-      this.teleporting = false;
-      hunter.lastTeleportTime = this.time.now;
+      if (!hunter.sprite.active || this.transitioning || this.gameOver) return;
+
       hunter.isSprinting = true;
       hunter.decisionAt = this.time.now;
-      this.playerAgent.moving = false;
-      this.updatePlayerVisualState();
 
-      // Unhook sprint after 4 seconds
       this.time.delayedCall(4000, () => {
+        if (!hunter.sprite.active) return;
         hunter.isSprinting = false;
       });
+
+      sfx.destroy();
     });
     sfx.play();
   }
 
   triggerTeleportSequence(hunter, time) {
-    this.teleporting = true;
-    this.stopAllAgents();
-
-    const origScale = hunter.sprite.scaleX;
+    hunter.lastSpecialTime = time;
+    this.lastAnySpecialAt = time;
+    hunter.isTeleporting = true;
+    hunter.direction = { x: 0, y: 0 };
+    hunter.moving = false;
+    this.tweens.killTweensOf(hunter.sprite);
 
     // 1. Vanish Animation
     this.tweens.add({
       targets: hunter.sprite,
-      scale: 0,
+      scaleX: 0,
+      scaleY: 0,
       angle: 720,
       duration: 600,
       onComplete: () => {
-        // 2. Play Audio 
-        const sfx = this.sound.add("chin_audio");
-        sfx.once("complete", () => {
-          // 3. Move closer to player and Reappear
-          const targetCell = this.findSafeCellNear(this.playerAgent.cellX, this.playerAgent.cellY, 3, 5);
-          hunter.cellX = targetCell.x;
-          hunter.cellY = targetCell.y;
-          hunter.sprite.setPosition(this.gridToWorld(targetCell.x), this.gridToWorldY(targetCell.y));
-          hunter.direction = { x: 0, y: 0 };
-          hunter.moving = false;
+        if (!hunter.sprite.active || !hunter.isTeleporting || this.transitioning || this.gameOver) return;
 
-          this.tweens.add({
-            targets: hunter.sprite,
-            scale: origScale,
-            angle: 0,
-            duration: 300,
-            onComplete: () => {
-              this.teleporting = false;
-              hunter.lastTeleportTime = this.time.now;
-              hunter.decisionAt = this.time.now;
-              this.playerAgent.moving = false; // Reset input momentum
-              this.updatePlayerVisualState();
-            }
-          });
+        const targetCell = this.findSafeCellNear(this.playerAgent.cellX, this.playerAgent.cellY, 3, 5);
+        hunter.cellX = targetCell.x;
+        hunter.cellY = targetCell.y;
+        hunter.sprite
+          .setPosition(this.gridToWorld(targetCell.x), this.gridToWorldY(targetCell.y))
+          .setVisible(true)
+          .setScale(0, 0);
+
+        this.sound.play("chin_audio");
+
+        this.tweens.add({
+          targets: hunter.sprite,
+          scaleX: hunter.baseScaleX,
+          scaleY: hunter.baseScaleY,
+          angle: 0,
+          duration: 900,
+          onComplete: () => {
+            hunter.decisionAt = this.time.now;
+            hunter.isTeleporting = false;
+          },
         });
-        sfx.play();
-      }
+      },
+    });
+  }
+
+  triggerFireSequence(hunter, direction, time) {
+    hunter.lastSpecialTime = time;
+    this.lastAnySpecialAt = time;
+    hunter.direction = { x: 0, y: 0 };
+    hunter.moving = false;
+    hunter.decisionAt = time + 260;
+
+    this.sound.play("aag_audio");
+    this.spawnFireProjectile(hunter, direction);
+
+    this.tweens.add({
+      targets: hunter.sprite,
+      scaleX: hunter.baseScaleX * 1.08,
+      scaleY: hunter.baseScaleY * 1.08,
+      duration: 90,
+      yoyo: true,
+      onComplete: () => {
+        hunter.sprite.setScale(hunter.baseScaleX, hunter.baseScaleY);
+      },
+    });
+  }
+
+  spawnFireProjectile(hunter, direction) {
+    const projectile = this.add.sprite(
+      hunter.sprite.x + direction.x * (this.tileSize * 0.7),
+      hunter.sprite.y + direction.y * (this.tileSize * 0.7),
+      "fire_projectile"
+    ).setDepth(5);
+
+    projectile.setDisplaySize(32, 42);
+    projectile.setAngle(this.getDirectionAngle(direction));
+    projectile.play("fire-burn");
+
+    this.fireProjectiles.push({
+      sprite: projectile,
+      direction: { ...direction },
+      speed: 260,
     });
   }
 
@@ -609,6 +724,7 @@ class GameScene extends Phaser.Scene {
   handlePlayerCaught() {
     if (this.invulnerable || this.transitioning || this.gameOver) return;
 
+    this.clearFireProjectiles();
     this.lives -= 1;
     this.refreshHud();
 
@@ -651,8 +767,15 @@ class GameScene extends Phaser.Scene {
       h.cellY = h.spawnCellY;
       h.direction = { x: 0, y: 0 };
       h.moving = false;
+      h.isSprinting = false;
+      h.isTeleporting = false;
       h.decisionAt = this.time.now + 300;
-      h.sprite.setPosition(this.gridToWorld(h.cellX), this.gridToWorldY(h.cellY));
+      this.tweens.killTweensOf(h.sprite);
+      h.sprite
+        .setPosition(this.gridToWorld(h.cellX), this.gridToWorldY(h.cellY))
+        .setScale(h.baseScaleX, h.baseScaleY)
+        .setAngle(0)
+        .setVisible(true);
     }
   }
 
@@ -668,7 +791,18 @@ class GameScene extends Phaser.Scene {
     this.updateHighScore(this.score);
     this.showNotice(`Level ${this.level} Cleared`);
 
+    const nextScene = this.level <= 2 ? "GameScene" : "LevelClearedScene";
     this.time.delayedCall(1200, () => {
+      if (nextScene === "GameScene") {
+        this.scene.start("GameScene", {
+          level: this.level + 1,
+          score: this.score,
+          highScore: this.highScore,
+          lives: this.lives,
+        });
+        return;
+      }
+
       this.scene.start("LevelClearedScene", {
         level: this.level, // Intentionally sending the current level (NOT implicitly skipped to next)
         score: this.score,
@@ -699,11 +833,16 @@ class GameScene extends Phaser.Scene {
     a.moving = false;
     a.sprite.setPosition(this.gridToWorld(a.cellX), this.gridToWorldY(a.cellY));
     this.updatePlayerVisualState();
+    this.clearFireProjectiles();
 
     for (const h of this.hunters) {
       h.direction = { x: 0, y: 0 };
       h.moving = false;
+      h.isSprinting = false;
+      h.isTeleporting = false;
+      this.tweens.killTweensOf(h.sprite);
       h.sprite.setPosition(this.gridToWorld(h.cellX), this.gridToWorldY(h.cellY));
+      h.sprite.setScale(h.baseScaleX, h.baseScaleY).setAngle(0).setVisible(true);
     }
   }
 
@@ -733,11 +872,66 @@ class GameScene extends Phaser.Scene {
     return this.boardOffsetY + cell * this.tileSize + this.tileSize / 2;
   }
 
+  worldToCell(worldPos, offset) {
+    return Math.floor((worldPos - offset) / this.tileSize);
+  }
+
   canMove(cellX, cellY) {
     if (cellX < 0 || cellY < 0 || cellX >= this.gridWidth || cellY >= this.gridHeight) {
       return false;
     }
     return this.levelLayout[cellY][cellX] !== "#";
+  }
+
+  getFireDirection(hunter) {
+    const player = this.playerAgent;
+    if (hunter.cellY === player.cellY) {
+      const step = player.cellX > hunter.cellX ? 1 : -1;
+      if (this.hasLineOfSight(hunter.cellX, hunter.cellY, player.cellX, player.cellY, step, 0)) {
+        return { x: step, y: 0 };
+      }
+    }
+
+    if (hunter.cellX === player.cellX) {
+      const step = player.cellY > hunter.cellY ? 1 : -1;
+      if (this.hasLineOfSight(hunter.cellX, hunter.cellY, player.cellX, player.cellY, 0, step)) {
+        return { x: 0, y: step };
+      }
+    }
+
+    return null;
+  }
+
+  hasLineOfSight(fromX, fromY, toX, toY, stepX, stepY) {
+    let cellX = fromX + stepX;
+    let cellY = fromY + stepY;
+
+    while (!(cellX === toX && cellY === toY)) {
+      if (!this.canMove(cellX, cellY)) {
+        return false;
+      }
+
+      cellX += stepX;
+      cellY += stepY;
+    }
+
+    return true;
+  }
+
+  getDirectionAngle(direction) {
+    if (direction.x > 0) return 90;
+    if (direction.x < 0) return -90;
+    if (direction.y > 0) return 180;
+    return 0;
+  }
+
+  clearFireProjectiles() {
+    for (const projectile of this.fireProjectiles) {
+      if (projectile.sprite?.active) {
+        projectile.sprite.destroy();
+      }
+    }
+    this.fireProjectiles = [];
   }
 
   findPathStep(start, goal) {

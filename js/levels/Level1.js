@@ -1,4 +1,4 @@
-const mainMap = [
+const levelOneMap = [
   "##################",
   "#C......##......M#",
   "#.####..##..####.#",
@@ -19,8 +19,29 @@ const mainMap = [
   "##################",
 ];
 
+const levelTwoMap = [
+  "##################",
+  "#C......##......A#",
+  "#.####..##..####.#",
+  "#................#",
+  "#..##.######.##..#",
+  "#................#",
+  "#.####.####.####.#",
+  "#......#..#......#",
+  "###.##.#..#.##.###",
+  "###.##..P...##.###",
+  "###.##.#..#.##.###",
+  "#......#..#......#",
+  "#.####.####.####.#",
+  "#................#",
+  "#..##.######.##..#",
+  "#................#",
+  "#.####..##..####.#",
+  "##################",
+];
+
 window.GameLevels = window.GameLevels || {};
-window.GameLevels[1] = mainMap;
-window.GameLevels[2] = mainMap;
-window.GameLevels[3] = mainMap;
-window.GameLevels[4] = mainMap;
+window.GameLevels[1] = levelOneMap;
+window.GameLevels[2] = levelTwoMap;
+window.GameLevels[3] = levelOneMap;
+window.GameLevels[4] = levelOneMap;
