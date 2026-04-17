@@ -116,15 +116,19 @@ GameScene.prototype.moveHunters = function moveHunters(delta, time) {
 
     if (!hunter.moving) {
       if (time >= hunter.decisionAt) {
-        const start = { x: hunter.cellX, y: hunter.cellY };
-        const goal = { x: this.playerAgent.cellX, y: this.playerAgent.cellY };
-        const nextStep = this.findPathStep(start, goal, hunter);
+        if (this.shouldChasePlayer(hunter)) {
+          const start = { x: hunter.cellX, y: hunter.cellY };
+          const goal = { x: this.playerAgent.cellX, y: this.playerAgent.cellY };
+          const nextStep = this.findPathStep(start, goal, hunter);
 
-        if (nextStep) {
-          hunter.direction = {
-            x: nextStep.x - start.x,
-            y: nextStep.y - start.y,
-          };
+          if (nextStep) {
+            hunter.direction = {
+              x: nextStep.x - start.x,
+              y: nextStep.y - start.y,
+            };
+          }
+        } else {
+          this.pickWanderDirection(hunter);
         }
 
         hunter.decisionAt = time + Phaser.Math.Between(120, 220);
@@ -155,6 +159,18 @@ GameScene.prototype.moveHunters = function moveHunters(delta, time) {
         speed = Math.max(80, speed * 0.72);
       }
       this.advanceAgent(hunter, delta, speed);
+
+      // Safety: if a non-phasing hunter somehow ended up in a wall, rescue it
+      if (!hunter.moving && !hunter.isPhasing &&
+          this.levelLayout[hunter.cellY]?.[hunter.cellX] === "#") {
+        const safe = this.findNearestOpenCell(hunter.cellX, hunter.cellY);
+        if (safe) {
+          hunter.cellX = safe.x;
+          hunter.cellY = safe.y;
+          hunter.direction = { x: 0, y: 0 };
+          hunter.sprite.setPosition(this.gridToWorld(safe.x), this.gridToWorldY(safe.y));
+        }
+      }
     }
   }
 };
@@ -179,4 +195,62 @@ GameScene.prototype.advanceAgent = function advanceAgent(agent, delta, speedOver
     agent.sprite.x += agent.direction.x * move;
     agent.sprite.y += agent.direction.y * move;
   }
+};
+
+/* ------------------------------------------------------------------ */
+/*  Level 5 hunter AI helpers                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Determines whether a hunter should use BFS to chase the player.
+ * On Level 5 only Mahi (D) always chases. Max (M) chases only while
+ * sprinting. All other hunters wander randomly.
+ * On every other level every hunter chases.
+ */
+GameScene.prototype.shouldChasePlayer = function shouldChasePlayer(hunter) {
+  if (this.level !== 5) return true;
+
+  // Mahi always chases
+  if (hunter.type === "D") return true;
+
+  // Max chases only during sprint
+  if (hunter.type === "M" && hunter.isSprinting) return true;
+
+  return false;
+};
+
+/**
+ * Pick a random wandering direction for a hunter.
+ * - 70 % chance to keep going straight if the path is clear.
+ * - Otherwise pick a random valid turn, avoiding 180° reversals
+ *   unless that is the only option.
+ */
+GameScene.prototype.pickWanderDirection = function pickWanderDirection(hunter) {
+  const dirs = [
+    { x: 1, y: 0 },
+    { x: -1, y: 0 },
+    { x: 0, y: 1 },
+    { x: 0, y: -1 },
+  ].filter(d => this.canHunterMove(hunter, hunter.cellX + d.x, hunter.cellY + d.y));
+
+  if (dirs.length === 0) {
+    hunter.direction = { x: 0, y: 0 };
+    return;
+  }
+
+  // Prefer continuing straight
+  const sameDir = dirs.find(
+    d => d.x === hunter.direction.x && d.y === hunter.direction.y
+  );
+  if (sameDir && Math.random() < 0.7) {
+    return; // keep current direction
+  }
+
+  // Avoid 180° reversal unless it's the only choice
+  const nonReverse = dirs.filter(
+    d => !(d.x === -hunter.direction.x && d.y === -hunter.direction.y)
+  );
+  const choices = nonReverse.length > 0 ? nonReverse : dirs;
+
+  hunter.direction = Phaser.Utils.Array.GetRandom(choices);
 };

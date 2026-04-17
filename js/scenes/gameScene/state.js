@@ -16,6 +16,7 @@ GameScene.prototype.initGameState = function initGameState(data) {
   this.playerAudioReplayTimer = null;
   this.lastAnySpecialAt = -5000;
   this.minSpecialGapMs = 5000;
+  if (this.level === 5) this.minSpecialGapMs = 4000;
   this.minAagTriggerDistanceTiles = 3.5;
   this._sixtySevenVideos = [];
 };

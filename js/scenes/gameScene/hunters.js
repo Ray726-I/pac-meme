@@ -123,7 +123,10 @@ GameScene.prototype.createActors = function createActors() {
       phaseAudio: null,
       baseScaleX: sprite.scaleX,
       baseScaleY: sprite.scaleY,
-      specialCooldown: spawn.type === "A" ? 2500 : (spawn.type === "D" ? 7000 : 20000),
+      specialCooldown: (function () {
+        const base = spawn.type === "A" ? 2500 : (spawn.type === "D" ? 7000 : 20000);
+        return this.level === 5 ? base - 1000 : base;
+      }).call(this),
     };
   });
 };
@@ -149,7 +152,7 @@ GameScene.prototype.checkHunterContact = function checkHunterContact() {
 
 GameScene.prototype.checkSpecialTriggers = function checkSpecialTriggers(time) {
   if (this.transitioning || this.gameOver || this.invulnerable) return;
-  if ((time - this.lastAnySpecialAt) < 5000) return;
+  if ((time - this.lastAnySpecialAt) < this.minSpecialGapMs) return;
 
   for (const hunter of this.hunters) {
     if (hunter.isSprinting || hunter.isTeleporting || hunter.isPhasing) continue;
@@ -210,6 +213,7 @@ GameScene.prototype.triggerSprintSequence = function triggerSprintSequence(hunte
   this.lastAnySpecialAt = time;
   hunter.direction = { x: 0, y: 0 };
   hunter.moving = false;
+  hunter.sprite.setPosition(this.gridToWorld(hunter.cellX), this.gridToWorldY(hunter.cellY));
   hunter.decisionAt = time + 120;
 
   hunter.isSprinting = true;
@@ -275,6 +279,7 @@ GameScene.prototype.triggerFireSequence = function triggerFireSequence(hunter, d
   this.lastAnySpecialAt = time;
   hunter.direction = { x: 0, y: 0 };
   hunter.moving = false;
+  hunter.sprite.setPosition(this.gridToWorld(hunter.cellX), this.gridToWorldY(hunter.cellY));
   hunter.decisionAt = time + 260;
 
   this.sound.play("aag_audio");
@@ -297,6 +302,7 @@ GameScene.prototype.triggerMahiThrowSequence = function triggerMahiThrowSequence
   this.lastAnySpecialAt = time;
   hunter.direction = { x: 0, y: 0 };
   hunter.moving = false;
+  hunter.sprite.setPosition(this.gridToWorld(hunter.cellX), this.gridToWorldY(hunter.cellY));
   hunter.decisionAt = time + 220;
 
   this.sound.play("mahi_throw_audio");
@@ -320,6 +326,7 @@ GameScene.prototype.triggerMahiPhasingSequence = function triggerMahiPhasingSequ
   hunter.isPhasing = true;
   hunter.direction = { x: 0, y: 0 };
   hunter.moving = false;
+  hunter.sprite.setPosition(this.gridToWorld(hunter.cellX), this.gridToWorldY(hunter.cellY));
   hunter.decisionAt = this.time.now;
 
   this.stopHunterPhaseAudio(hunter);
@@ -339,6 +346,18 @@ GameScene.prototype.triggerMahiPhasingSequence = function triggerMahiPhasingSequ
     hunter.isPhasing = false;
     hunter.sprite.setAlpha(1);
     this.stopHunterPhaseAudio(hunter);
+
+    // Safety: if stuck inside a wall after phasing ends, snap to nearest open cell
+    if (this.levelLayout[hunter.cellY]?.[hunter.cellX] === "#") {
+      const safe = this.findNearestOpenCell(hunter.cellX, hunter.cellY);
+      if (safe) {
+        hunter.cellX = safe.x;
+        hunter.cellY = safe.y;
+        hunter.direction = { x: 0, y: 0 };
+        hunter.moving = false;
+        hunter.sprite.setPosition(this.gridToWorld(safe.x), this.gridToWorldY(safe.y));
+      }
+    }
   });
 };
 
@@ -498,4 +517,34 @@ GameScene.prototype.removeSixtySevenMeme = function removeSixtySevenMeme() {
     });
     this._sixtySevenVideos = [];
   }
+};
+
+/**
+ * BFS outward from (cx, cy) to find the nearest non-wall cell.
+ * Used as a safety net when a hunter ends phasing inside a wall.
+ */
+GameScene.prototype.findNearestOpenCell = function findNearestOpenCell(cx, cy) {
+  const queue = [{ x: cx, y: cy }];
+  const visited = new Set([`${cx},${cy}`]);
+  const dirs = [
+    { x: 1, y: 0 }, { x: -1, y: 0 },
+    { x: 0, y: 1 }, { x: 0, y: -1 },
+  ];
+
+  while (queue.length > 0) {
+    const cur = queue.shift();
+    if (this.levelLayout[cur.y]?.[cur.x] !== "#") {
+      return cur;
+    }
+    for (const d of dirs) {
+      const nx = cur.x + d.x;
+      const ny = cur.y + d.y;
+      const nk = `${nx},${ny}`;
+      if (visited.has(nk)) continue;
+      if (nx < 0 || ny < 0 || nx >= this.gridWidth || ny >= this.gridHeight) continue;
+      visited.add(nk);
+      queue.push({ x: nx, y: ny });
+    }
+  }
+  return null;
 };
