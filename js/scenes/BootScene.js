@@ -30,25 +30,13 @@ class BootScene extends Phaser.Scene {
     this.createGeneratedTextures();
     this.createPlayerAnimations();
     this.createHunterAnimations();
-    this.scene.start("StartScene");
+    this.scene.start("TitleScene");
   }
 
   createPlayerAnimations() {
     if (!this.anims.exists("player-run")) {
       this.anims.create({
         key: "player-run",
-        frames: this.anims.generateFrameNumbers("player_run", {
-          start: 0,
-          end: 102,
-        }),
-        frameRate: 22,
-        repeat: -1,
-      });
-    }
-
-    if (!this.anims.exists("player-run-rotating")) {
-      this.anims.create({
-        key: "player-run-rotating",
         frames: this.anims.generateFrameNumbers("player_run", {
           start: 24,
           end: 69,

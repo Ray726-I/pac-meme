@@ -22,11 +22,11 @@ class GameScene extends Phaser.Scene {
     this.fireProjectiles = [];
     this.nextDirection = { x: 0, y: 0 };
     this.playerSoundEnabled = true;
-    this.playerUseRotatingOnlyAnimation = false;
-    this.playerAudioOnlyOnRotatingFrames = true;
-    this.playerRotatingNow = false;
+    this.playerAudioPlayCount = 0;
+    this.playerAudioReplayTimer = null;
     this.lastAnySpecialAt = -5000;
     this.minSpecialGapMs = 5000;
+    this.minAagTriggerDistanceTiles = 3.5;
   }
 
   create() {
@@ -63,7 +63,6 @@ class GameScene extends Phaser.Scene {
 
   initPlayerAudio() {
     this.playerAudio = this.sound.add("player_audio", {
-      loop: true,
       volume: 0.25,
     });
 
@@ -73,6 +72,11 @@ class GameScene extends Phaser.Scene {
 
   teardownPlayerAudio() {
     if (!this.playerAudio) return;
+
+    if (this.playerAudioReplayTimer) {
+      this.playerAudioReplayTimer.remove(false);
+      this.playerAudioReplayTimer = null;
+    }
 
     if (this.playerAudio.isPlaying) {
       this.playerAudio.stop();
@@ -236,7 +240,7 @@ class GameScene extends Phaser.Scene {
 
   createHud() {
     this.hudStyle = {
-      fontFamily: "Trebuchet MS",
+      fontFamily: 'PacFont',
       fontSize: "20px",
       color: "#e2e8f0",
       stroke: "#020617",
@@ -331,11 +335,9 @@ class GameScene extends Phaser.Scene {
     const sprite = this.playerAgent.sprite;
 
     if (this.playerAgent.moving) {
-      const nextAnim = this.playerUseRotatingOnlyAnimation ? "player-run-rotating" : "player-run";
-      if (!sprite.anims.isPlaying || sprite.anims.currentAnim?.key !== nextAnim) {
-        sprite.play(nextAnim, true);
+      if (!sprite.anims.isPlaying || sprite.anims.currentAnim?.key !== "player-run") {
+        sprite.play("player-run", true);
       }
-      this.playerRotatingNow = this.isPlayerInRotatingPhase();
       this.updatePlayerAudioState();
       return;
     }
@@ -347,49 +349,51 @@ class GameScene extends Phaser.Scene {
       sprite.setTexture("player_idle");
     }
 
-    this.playerRotatingNow = false;
     this.updatePlayerAudioState();
-  }
-
-  isPlayerInRotatingPhase() {
-    if (!this.playerAgent?.moving) return false;
-
-    const currentKey = this.playerAgent.sprite.anims.currentAnim?.key;
-    if (currentKey === "player-run-rotating") {
-      return true;
-    }
-
-    if (currentKey !== "player-run") {
-      return false;
-    }
-
-    const frame = Number(this.playerAgent.sprite.anims.currentFrame?.textureFrame ?? -1);
-    if (Number.isNaN(frame)) {
-      return false;
-    }
-    return frame >= 24 && frame <= 69;
   }
 
   updatePlayerAudioState() {
     if (!this.playerAudio) return;
 
     if (!this.playerSoundEnabled) {
-      if (this.playerAudio.isPlaying) {
-        this.playerAudio.stop();
-      }
+      this.stopPlayerAudio();
       return;
     }
 
-    const shouldPlay = this.playerAgent.moving && (!this.playerAudioOnlyOnRotatingFrames || this.playerRotatingNow);
-
-    if (shouldPlay) {
-      if (!this.playerAudio.isPlaying) {
-        this.playerAudio.play();
-      }
+    if (!this.playerAgent.moving) {
+      this.stopPlayerAudio();
       return;
     }
 
-    if (this.playerAudio.isPlaying) {
+    if (this.playerAudio.isPlaying || this.playerAudioReplayTimer) return;
+
+    this.playPlayerAudio();
+  }
+
+  playPlayerAudio() {
+    if (!this.playerAudio || !this.playerAgent?.moving) return;
+
+    this.playerAudio.play();
+
+    this.playerAudio.once("complete", () => {
+      if (!this.playerAudio || !this.playerAgent?.moving || !this.playerSoundEnabled) return;
+
+      this.playerAudioReplayTimer = this.time.delayedCall(1000, () => {
+        this.playerAudioReplayTimer = null;
+        if (this.playerAgent?.moving && this.playerSoundEnabled) {
+          this.playPlayerAudio();
+        }
+      });
+    });
+  }
+
+  stopPlayerAudio() {
+    if (this.playerAudioReplayTimer) {
+      this.playerAudioReplayTimer.remove(false);
+      this.playerAudioReplayTimer = null;
+    }
+
+    if (this.playerAudio?.isPlaying) {
       this.playerAudio.stop();
     }
   }
@@ -581,7 +585,11 @@ class GameScene extends Phaser.Scene {
 
       if (hunter.type === "A") {
         const fireDirection = this.getFireDirection(hunter);
-        if (dist > this.tileSize * 2.5 && fireDirection && (time - hunter.lastSpecialTime) > hunter.specialCooldown) {
+        if (
+          dist > this.tileSize * this.minAagTriggerDistanceTiles
+          && fireDirection
+          && (time - hunter.lastSpecialTime) > hunter.specialCooldown
+        ) {
           this.triggerFireSequence(hunter, fireDirection, time);
           return;
         }
@@ -794,20 +802,9 @@ class GameScene extends Phaser.Scene {
     this.updateHighScore(this.score);
     this.showNotice(`Level ${this.level} Cleared`);
 
-    const nextScene = this.level <= 2 ? "GameScene" : "LevelClearedScene";
     this.time.delayedCall(1200, () => {
-      if (nextScene === "GameScene") {
-        this.scene.start("GameScene", {
-          level: this.level + 1,
-          score: this.score,
-          highScore: this.highScore,
-          lives: this.lives,
-        });
-        return;
-      }
-
       this.scene.start("LevelClearedScene", {
-        level: this.level, // Intentionally sending the current level (NOT implicitly skipped to next)
+        level: this.level,
         score: this.score,
         highScore: this.highScore,
         lives: this.lives,
