@@ -33,6 +33,9 @@ class GameScene extends Phaser.Scene {
     this.cursors = this.input.keyboard.createCursorKeys();
 
     this.levelLayout = window.GameLevels[this.level] || window.GameLevels[2];
+    if (this.level === 2) {
+      this.minSpecialGapMs = 2000;
+    }
     this.gridHeight = this.levelLayout.length;
     this.gridWidth = this.levelLayout[0]?.length || 0;
 
@@ -197,11 +200,11 @@ class GameScene extends Phaser.Scene {
       const sprite = this.add.sprite(sx, sy, spriteKey).setDepth(4);
 
       if (spriteKey === "chin_tapak") {
-        sprite.setDisplaySize(46, 46);
+        sprite.setDisplaySize(52, 52);
       } else if (spriteKey === "max_hunter") {
-        sprite.setDisplaySize(35, 35);
+        sprite.setDisplaySize(42, 42);
       } else if (spriteKey === "amitabh_aag") {
-        sprite.setDisplaySize(58, 33);
+        sprite.setDisplaySize(64, 36);
       } else if (spawn.type !== "C" && spawn.type !== "M" && i === 1) {
         sprite.setTint(0xfb923c);
       }
@@ -222,7 +225,7 @@ class GameScene extends Phaser.Scene {
         isTeleporting: false,
         baseScaleX: sprite.scaleX,
         baseScaleY: sprite.scaleY,
-        specialCooldown: spawn.type === "A" ? 6500 : 20000,
+        specialCooldown: spawn.type === "A" ? 2500 : 20000,
       };
     });
   }
