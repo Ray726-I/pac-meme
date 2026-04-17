@@ -212,21 +212,20 @@ GameScene.prototype.triggerSprintSequence = function triggerSprintSequence(hunte
   hunter.moving = false;
   hunter.decisionAt = time + 120;
 
+  hunter.isSprinting = true;
+  hunter.decisionAt = this.time.now;
+
   const sfx = this.sound.add("max_audio");
   sfx.once("complete", () => {
-    if (!hunter.sprite.active || this.transitioning || this.gameOver) return;
-
-    hunter.isSprinting = true;
-    hunter.decisionAt = this.time.now;
-
-    this.time.delayedCall(4000, () => {
-      if (!hunter.sprite.active) return;
-      hunter.isSprinting = false;
-    });
-
+    if (!hunter.sprite.active) return;
     sfx.destroy();
   });
   sfx.play();
+
+  this.time.delayedCall(4000, () => {
+    if (!hunter.sprite.active) return;
+    hunter.isSprinting = false;
+  });
 };
 
 GameScene.prototype.triggerTeleportSequence = function triggerTeleportSequence(hunter, time) {
