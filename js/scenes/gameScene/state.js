@@ -49,6 +49,20 @@ GameScene.prototype.collectPelletAt = function collectPelletAt(cx, cy) {
   if (this.transitioning || this.gameOver) return;
 
   const key = `${cx},${cy}`;
+
+  // Check for parleg pickup first
+  const parleg = this.parlegByCell?.get(key);
+  if (parleg && parleg.active) {
+    parleg.destroy();
+    this.parlegByCell.delete(key);
+    if (this.lives < 5) {
+      this.lives += 1;
+      this.refreshHud();
+      this.showNotice("Parle-G! +1 ❤️");
+    }
+    return;
+  }
+
   const pellet = this.pelletByCell.get(key);
   if (!pellet || !pellet.active) return;
 

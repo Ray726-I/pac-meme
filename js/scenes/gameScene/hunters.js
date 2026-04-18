@@ -23,6 +23,72 @@ GameScene.prototype.buildLevel = function buildLevel() {
   }
 
   this.drawTubularWalls();
+  this.spawnParlegs();
+};
+
+GameScene.prototype.spawnParlegs = function spawnParlegs() {
+  this.parlegSprites = [];
+  this.parlegByCell = new Map();
+
+  const parlegCount = this.level >= 4 ? 2 : 1;
+
+  // Collect all open cells that aren't spawns
+  const openCells = [];
+  const spawnKeys = new Set();
+  spawnKeys.add(`${this.playerSpawnCell.x},${this.playerSpawnCell.y}`);
+  for (const s of this.hunterSpawnCells) {
+    spawnKeys.add(`${s.x},${s.y}`);
+  }
+
+  for (let row = 0; row < this.gridHeight; row++) {
+    for (let col = 0; col < this.gridWidth; col++) {
+      const cell = this.levelLayout[row][col];
+      if (cell === "." && !spawnKeys.has(`${col},${row}`)) {
+        openCells.push({ x: col, y: row });
+      }
+    }
+  }
+
+  // Shuffle and pick cells spread apart
+  Phaser.Utils.Array.Shuffle(openCells);
+  const chosen = [];
+  for (const c of openCells) {
+    if (chosen.length >= parlegCount) break;
+    // Ensure parlegs aren't too close to each other (min 5 cells apart)
+    const tooClose = chosen.some(
+      (p) => Math.abs(p.x - c.x) + Math.abs(p.y - c.y) < 5
+    );
+    if (tooClose) continue;
+    chosen.push(c);
+  }
+
+  for (const pos of chosen) {
+    const wx = this.gridToWorld(pos.x);
+    const wy = this.gridToWorldY(pos.y);
+    const sprite = this.add.image(wx, wy, "parleg").setDepth(3);
+    sprite.setDisplaySize(this.tileSize - 4, this.tileSize - 4);
+
+    // Gentle floating animation
+    this.tweens.add({
+      targets: sprite,
+      y: wy - 4,
+      duration: 800,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut",
+    });
+
+    const key = `${pos.x},${pos.y}`;
+    this.parlegByCell.set(key, sprite);
+    this.parlegSprites.push(sprite);
+
+    // Remove the pellet at this cell since parleg replaces it
+    const pellet = this.pelletByCell.get(key);
+    if (pellet) {
+      pellet.destroy();
+      this.pelletByCell.delete(key);
+    }
+  }
 };
 
 GameScene.prototype.drawTubularWalls = function drawTubularWalls() {
@@ -132,6 +198,10 @@ GameScene.prototype.createActors = function createActors() {
         if (this.level === 3) {
           if (spawn.type === "A") return 1800;
         }
+        if (this.level === 4) {
+          if (spawn.type === "A") return 1800;
+          if (spawn.type === "C") return 12000;
+        }
         return spawn.type === "A" ? 2500 : (spawn.type === "D" ? 7000 : 20000);
       }).call(this),
     };
@@ -207,7 +277,8 @@ GameScene.prototype.checkSpecialTriggers = function checkSpecialTriggers(time) {
       continue;
     }
 
-    if (dist > 240 && (time - hunter.lastSpecialTime) > hunter.specialCooldown) {
+    const triggerDist = (this.level === 4 && hunter.type === "C") ? 160 : 240;
+    if (dist > triggerDist && (time - hunter.lastSpecialTime) > hunter.specialCooldown) {
       if (hunter.type === "C") {
         this.triggerTeleportSequence(hunter, time);
         return;
