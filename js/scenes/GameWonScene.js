@@ -25,93 +25,101 @@ class GameWonScene extends Phaser.Scene {
     const canvas = this.sys.game.canvas;
     const rect = canvas.getBoundingClientRect();
 
-    // Image bleeds 12% beyond canvas on every side
-    const bleed = 0.12;
-    const imgW = Math.round(rect.width  * (1 + bleed * 2));
-    const imgH = Math.round(rect.height * (1 + bleed * 2));
-    const imgX = Math.round(rect.left   - rect.width  * bleed);
-    const imgY = Math.round(rect.top    - rect.height * bleed);
+    // Load image first to get natural aspect ratio
+    const tmpImg = new Image();
+    tmpImg.src = "assets/congrats.png";
 
-    // ── Congrats image ──────────────────────────────────────────────────────
-    const img = document.createElement("img");
-    img.src = "assets/congrats.png";
-    img.style.position = "fixed";
-    img.style.left     = imgX + "px";
-    img.style.top      = imgY + "px";
-    img.style.width    = imgW + "px";
-    img.style.height   = imgH + "px";
-    img.style.zIndex   = "8000";
-    img.style.objectFit = "fill";
-    img.style.pointerEvents = "none";
-    document.body.appendChild(img);
-    this._domElements.push(img);
+    const render = (naturalW, naturalH) => {
+      const aspect = naturalH / naturalW;
 
-    // ── UI panel centred in the white space ─────────────────────────────────
-    // The white gap in congrats.png is roughly the middle 30% vertically
-    // and spans the centre horizontally.
-    const panelW  = Math.round(rect.width * 0.38);
-    const panelCX = Math.round(rect.left + rect.width / 2);
-    const panelCY = Math.round(rect.top  + rect.height * 0.50); // tweak if needed
+      // 15% wider than canvas on each side = 130% total width
+      const imgW = Math.round(rect.width * 1.30);
+      const imgH = Math.round(imgW * aspect);            // correct ratio
+      const imgX = Math.round(rect.left + (rect.width - imgW) / 2); // centered horizontally
+      const imgY = Math.round(rect.top  + (rect.height - imgH) / 2); // centered vertically
 
-    const panel = document.createElement("div");
-    panel.style.position        = "fixed";
-    panel.style.left            = (panelCX - panelW / 2) + "px";
-    panel.style.top             = (panelCY - 100) + "px";
-    panel.style.width           = panelW + "px";
-    panel.style.zIndex          = "8001";
-    panel.style.display         = "flex";
-    panel.style.flexDirection   = "column";
-    panel.style.alignItems      = "center";
-    panel.style.gap             = "18px";
-    panel.style.fontFamily      = "'PacFont', monospace";
+      // ── Congrats image ────────────────────────────────────────────────────
+      const img = document.createElement("img");
+      img.src = "assets/congrats.png";
+      img.style.position      = "fixed";
+      img.style.left          = imgX + "px";
+      img.style.top           = imgY + "px";
+      img.style.width         = imgW + "px";
+      img.style.height        = imgH + "px";
+      img.style.zIndex        = "8000";
+      img.style.objectFit     = "fill"; // exact pixel fit since we calculated size
+      img.style.pointerEvents = "none";
+      document.body.appendChild(img);
+      this._domElements.push(img);
 
-    // "PLAY AGAIN?" heading
-    const heading = document.createElement("div");
-    heading.textContent     = "PLAY AGAIN?";
-    heading.style.fontSize  = "28px";
-    heading.style.color     = "#1e293b";
-    heading.style.fontWeight = "bold";
-    heading.style.letterSpacing = "2px";
-    heading.style.textShadow = "0 1px 2px rgba(0,0,0,0.25)";
-    panel.appendChild(heading);
+      // ── UI panel — centred in the white space of the image ───────────────
+      // White space is roughly the vertical middle 30% of the image
+      const imgCenterX = imgX + imgW / 2;
+      const imgCenterY = imgY + imgH / 2;
 
-    // Score line
-    const scoreLine = document.createElement("div");
-    scoreLine.textContent   = `Score: ${this.score}`;
-    scoreLine.style.fontSize = "15px";
-    scoreLine.style.color   = "#475569";
-    panel.appendChild(scoreLine);
+      const panelW  = Math.round(imgW * 0.30);
 
-    // Buttons row
-    const btnRow = document.createElement("div");
-    btnRow.style.display = "flex";
-    btnRow.style.gap     = "24px";
+      const panel = document.createElement("div");
+      panel.style.position      = "fixed";
+      panel.style.left          = (imgCenterX - panelW / 2) + "px";
+      panel.style.top           = (imgCenterY - 90) + "px";
+      panel.style.width         = panelW + "px";
+      panel.style.zIndex        = "8001";
+      panel.style.display       = "flex";
+      panel.style.flexDirection = "column";
+      panel.style.alignItems    = "center";
+      panel.style.gap           = "16px";
+      panel.style.fontFamily    = "'PacFont', monospace";
 
-    // YES button (highlighted)
-    const yesBtn = this._makeBtn("YES", true);
-    yesBtn.addEventListener("click", () => {
-      this._cleanup();
-      this.scene.start("GameScene", {
-        level: 1,
-        score: 0,
-        highScore: this.highScore,
-        lives: 3,
+      // "PLAY AGAIN?" heading
+      const heading = document.createElement("div");
+      heading.textContent          = "PLAY AGAIN?";
+      heading.style.fontSize       = "26px";
+      heading.style.color          = "#1e293b";
+      heading.style.fontWeight     = "bold";
+      heading.style.letterSpacing  = "2px";
+      heading.style.textShadow     = "0 1px 2px rgba(0,0,0,0.25)";
+      panel.appendChild(heading);
+
+      // Score line
+      const scoreLine = document.createElement("div");
+      scoreLine.textContent    = `Score: ${this.score}`;
+      scoreLine.style.fontSize = "14px";
+      scoreLine.style.color    = "#475569";
+      panel.appendChild(scoreLine);
+
+      // Buttons row
+      const btnRow = document.createElement("div");
+      btnRow.style.display = "flex";
+      btnRow.style.gap     = "20px";
+
+      const yesBtn = this._makeBtn("YES", true);
+      yesBtn.addEventListener("click", () => {
+        this._cleanup();
+        this.scene.start("StartScene");
       });
-    });
 
-    // NO button
-    const noBtn = this._makeBtn("NO", false);
-    noBtn.addEventListener("click", () => {
-      this._cleanup();
-      this.scene.start("TitleScene");
-    });
+      const noBtn = this._makeBtn("NO", false);
+      noBtn.addEventListener("click", () => {
+        this._cleanup();
+        this.scene.start("TitleScene");
+      });
 
-    btnRow.appendChild(yesBtn);
-    btnRow.appendChild(noBtn);
-    panel.appendChild(btnRow);
+      btnRow.appendChild(yesBtn);
+      btnRow.appendChild(noBtn);
+      panel.appendChild(btnRow);
 
-    document.body.appendChild(panel);
-    this._domElements.push(panel);
+      document.body.appendChild(panel);
+      this._domElements.push(panel);
+    };
+
+    if (tmpImg.complete && tmpImg.naturalWidth) {
+      render(tmpImg.naturalWidth, tmpImg.naturalHeight);
+    } else {
+      tmpImg.onload = () => render(tmpImg.naturalWidth, tmpImg.naturalHeight);
+      // Fallback if naturalWidth never fires (e.g. cached race condition)
+      tmpImg.onerror = () => render(800, 600);
+    }
   }
 
   _makeBtn(label, highlighted) {

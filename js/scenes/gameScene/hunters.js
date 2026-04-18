@@ -30,7 +30,7 @@ GameScene.prototype.spawnParlegs = function spawnParlegs() {
   this.parlegSprites = [];
   this.parlegByCell = new Map();
 
-  const parlegCount = this.level >= 4 ? 2 : 1;
+  const parlegCount = this.level === 5 ? 3 : this.level >= 4 ? 2 : 1;
 
   // Collect all open cells that aren't spawns
   const openCells = [];
@@ -66,7 +66,7 @@ GameScene.prototype.spawnParlegs = function spawnParlegs() {
     const wx = this.gridToWorld(pos.x);
     const wy = this.gridToWorldY(pos.y);
     const sprite = this.add.image(wx, wy, "parleg").setDepth(3);
-    sprite.setDisplaySize(this.tileSize - 4, this.tileSize - 4);
+    sprite.setDisplaySize(this.tileSize * 2, this.tileSize * 2);
 
     // Gentle floating animation
     this.tweens.add({
@@ -166,7 +166,7 @@ GameScene.prototype.createActors = function createActors() {
     } else if (spriteKey === "amitabh_aag") {
       sprite.setDisplaySize(64, 36);
     } else if (spriteKey === "mahi_hunter") {
-      sprite.setDisplaySize(52, 52);
+      sprite.setDisplaySize(40, 40);
     } else if (spawn.type !== "C" && spawn.type !== "M" && i === 1) {
       sprite.setTint(0xfb923c);
     }
@@ -180,7 +180,7 @@ GameScene.prototype.createActors = function createActors() {
       spawnCellY: spawn.y,
       direction: { x: 0, y: 0 },
       moving: false,
-      speed: this.baseHunterSpeed + (spriteKey === "max_hunter" ? 10 : i * 8),
+      speed: this.baseHunterSpeed + (spriteKey === "max_hunter" ? 10 : (spawn.type === "D" && this.level === 5) ? 0 : i * 8),
       decisionAt: 0,
       lastSpecialTime: -30000,
       isSprinting: false,
@@ -191,7 +191,7 @@ GameScene.prototype.createActors = function createActors() {
       baseScaleY: sprite.scaleY,
       specialCooldown: (function () {
         if (this.level === 5) {
-          if (spawn.type === "D") return 6000;
+          if (spawn.type === "D") return 9000;
           if (spawn.type === "A") return 1500;
           return 19000;
         }
