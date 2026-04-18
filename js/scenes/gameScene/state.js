@@ -159,7 +159,8 @@ GameScene.prototype.levelComplete = function levelComplete() {
   this.showNotice(`Level ${this.level} Cleared`);
 
   this.time.delayedCall(1200, () => {
-    this.scene.start("LevelClearedScene", {
+    const targetScene = this.level === 5 ? "GameWonScene" : "LevelClearedScene";
+    this.scene.start(targetScene, {
       level: this.level,
       score: this.score,
       highScore: this.highScore,
