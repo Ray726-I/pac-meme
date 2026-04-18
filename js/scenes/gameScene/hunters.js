@@ -23,6 +23,72 @@ GameScene.prototype.buildLevel = function buildLevel() {
   }
 
   this.drawTubularWalls();
+  this.spawnParlegs();
+};
+
+GameScene.prototype.spawnParlegs = function spawnParlegs() {
+  this.parlegSprites = [];
+  this.parlegByCell = new Map();
+
+  const parlegCount = this.level === 5 ? 3 : this.level >= 4 ? 2 : 1;
+
+  // Collect all open cells that aren't spawns
+  const openCells = [];
+  const spawnKeys = new Set();
+  spawnKeys.add(`${this.playerSpawnCell.x},${this.playerSpawnCell.y}`);
+  for (const s of this.hunterSpawnCells) {
+    spawnKeys.add(`${s.x},${s.y}`);
+  }
+
+  for (let row = 0; row < this.gridHeight; row++) {
+    for (let col = 0; col < this.gridWidth; col++) {
+      const cell = this.levelLayout[row][col];
+      if (cell === "." && !spawnKeys.has(`${col},${row}`)) {
+        openCells.push({ x: col, y: row });
+      }
+    }
+  }
+
+  // Shuffle and pick cells spread apart
+  Phaser.Utils.Array.Shuffle(openCells);
+  const chosen = [];
+  for (const c of openCells) {
+    if (chosen.length >= parlegCount) break;
+    // Ensure parlegs aren't too close to each other (min 5 cells apart)
+    const tooClose = chosen.some(
+      (p) => Math.abs(p.x - c.x) + Math.abs(p.y - c.y) < 5
+    );
+    if (tooClose) continue;
+    chosen.push(c);
+  }
+
+  for (const pos of chosen) {
+    const wx = this.gridToWorld(pos.x);
+    const wy = this.gridToWorldY(pos.y);
+    const sprite = this.add.image(wx, wy, "parleg").setDepth(3);
+    sprite.setDisplaySize(this.tileSize * 2, this.tileSize * 2);
+
+    // Gentle floating animation
+    this.tweens.add({
+      targets: sprite,
+      y: wy - 4,
+      duration: 800,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut",
+    });
+
+    const key = `${pos.x},${pos.y}`;
+    this.parlegByCell.set(key, sprite);
+    this.parlegSprites.push(sprite);
+
+    // Remove the pellet at this cell since parleg replaces it
+    const pellet = this.pelletByCell.get(key);
+    if (pellet) {
+      pellet.destroy();
+      this.pelletByCell.delete(key);
+    }
+  }
 };
 
 GameScene.prototype.drawTubularWalls = function drawTubularWalls() {
@@ -100,7 +166,7 @@ GameScene.prototype.createActors = function createActors() {
     } else if (spriteKey === "amitabh_aag") {
       sprite.setDisplaySize(64, 36);
     } else if (spriteKey === "mahi_hunter") {
-      sprite.setDisplaySize(52, 52);
+      sprite.setDisplaySize(40, 40);
     } else if (spawn.type !== "C" && spawn.type !== "M" && i === 1) {
       sprite.setTint(0xfb923c);
     }
@@ -114,7 +180,7 @@ GameScene.prototype.createActors = function createActors() {
       spawnCellY: spawn.y,
       direction: { x: 0, y: 0 },
       moving: false,
-      speed: this.baseHunterSpeed + (spriteKey === "max_hunter" ? 10 : i * 8),
+      speed: this.baseHunterSpeed + (spriteKey === "max_hunter" ? 10 : (spawn.type === "D" && this.level === 5) ? 0 : i * 8),
       decisionAt: 0,
       lastSpecialTime: -30000,
       isSprinting: false,
@@ -125,12 +191,19 @@ GameScene.prototype.createActors = function createActors() {
       baseScaleY: sprite.scaleY,
       specialCooldown: (function () {
         if (this.level === 5) {
-          if (spawn.type === "D") return 6000;
+          if (spawn.type === "D") return 9000;
           if (spawn.type === "A") return 1500;
           return 19000;
         }
+        if (this.level === 2) {
+          if (spawn.type === "C") return 13000;
+        }
         if (this.level === 3) {
           if (spawn.type === "A") return 1800;
+        }
+        if (this.level === 4) {
+          if (spawn.type === "A") return 1800;
+          if (spawn.type === "C") return 12000;
         }
         return spawn.type === "A" ? 2500 : (spawn.type === "D" ? 7000 : 20000);
       }).call(this),
@@ -207,7 +280,8 @@ GameScene.prototype.checkSpecialTriggers = function checkSpecialTriggers(time) {
       continue;
     }
 
-    if (dist > 240 && (time - hunter.lastSpecialTime) > hunter.specialCooldown) {
+    const triggerDist = (this.level === 4 && hunter.type === "C") ? 160 : 240;
+    if (dist > triggerDist && (time - hunter.lastSpecialTime) > hunter.specialCooldown) {
       if (hunter.type === "C") {
         this.triggerTeleportSequence(hunter, time);
         return;
@@ -527,6 +601,125 @@ GameScene.prototype.removeSixtySevenMeme = function removeSixtySevenMeme() {
       vid.remove();
     });
     this._sixtySevenVideos = [];
+  }
+};
+
+// ─── Score milestone: multiples of 100 (not 200) ───────────────────────────
+
+GameScene.prototype.triggerScoreMilestone100 = function triggerScoreMilestone100() {
+  if (!this.scoreText) return;
+
+  const animText = this.add.text(this.scoreText.x, this.scoreText.y, `${this.score}!`, {
+    fontFamily: 'PacFont',
+    fontSize: "26px",
+    color: "#34d399"
+  }).setOrigin(0, 0).setDepth(20);
+
+  this.tweens.add({
+    targets: animText,
+    y: animText.y - 70,
+    scaleX: 2.8,
+    scaleY: 2.8,
+    duration: 1600,
+    ease: "Power2",
+    onUpdate: (tween) => {
+      if (tween.getValue() > 0.5) animText.setColor("#f59e0b");
+    },
+    onComplete: () => animText.destroy(),
+  });
+
+  this._spawnMilestoneMedia(
+    "assets/shabash-beta-100.mp4",   // right  (video)
+    "assets/rabbit-sticker-bunny-sticker.gif",  // left (gif)
+    "#34d399"
+  );
+};
+
+// ─── Score milestone: multiples of 200 ─────────────────────────────────────
+
+GameScene.prototype.triggerScoreMilestone200 = function triggerScoreMilestone200() {
+  if (!this.scoreText) return;
+
+  const animText = this.add.text(this.scoreText.x, this.scoreText.y, `${this.score}!!`, {
+    fontFamily: 'PacFont',
+    fontSize: "28px",
+    color: "#a78bfa"
+  }).setOrigin(0, 0).setDepth(20);
+
+  this.tweens.add({
+    targets: animText,
+    y: animText.y - 80,
+    scaleX: 3,
+    scaleY: 3,
+    duration: 1800,
+    ease: "Power2",
+    onUpdate: (tween) => {
+      if (tween.getValue() > 0.5) animText.setColor("#ec4899");
+    },
+    onComplete: () => animText.destroy(),
+  });
+
+  this._spawnMilestoneMedia(
+    "assets/clap-200.mp4",                          // right (video)
+    "assets/spongebob-squarepants-spongebob.gif",   // left  (gif)
+    "#a78bfa"
+  );
+};
+
+// ─── Shared DOM media spawner ───────────────────────────────────────────────
+
+GameScene.prototype._spawnMilestoneMedia = function _spawnMilestoneMedia(rightVideoSrc, leftGifSrc, glowColor) {
+  this.removeMilestoneMedia();
+
+  const canvas = this.sys.game.canvas;
+  const rect = canvas.getBoundingClientRect();
+
+  const mediaW = Math.round(rect.width * 0.30);
+  const mediaH = Math.round(mediaW * (9 / 16));
+  const cy = Math.round(rect.top + (rect.height - mediaH) / 2);
+
+  // Right side — video
+  const vid = document.createElement("video");
+  vid.src = rightVideoSrc;
+  vid.autoplay = true;
+  vid.muted = false;
+  vid.playsInline = true;
+  vid.style.position = "fixed";
+  vid.style.left = (rect.right + 5) + "px";
+  vid.style.top = cy + "px";
+  vid.style.width = mediaW + "px";
+  vid.style.height = mediaH + "px";
+  vid.style.zIndex = "9998";
+  vid.style.borderRadius = "8px";
+  vid.style.boxShadow = `0 0 18px ${glowColor}99`;
+  vid.style.objectFit = "cover";
+  vid.onended = () => { vid.remove(); this._milestoneMedia = this._milestoneMedia?.filter(el => el !== vid); };
+  document.body.appendChild(vid);
+
+  // Left side — gif image
+  const img = document.createElement("img");
+  img.src = leftGifSrc;
+  img.style.position = "fixed";
+  img.style.left = (rect.left - mediaW - 5) + "px";
+  img.style.top = cy + "px";
+  img.style.width = mediaW + "px";
+  img.style.height = mediaH + "px";
+  img.style.zIndex = "9998";
+  img.style.borderRadius = "8px";
+  img.style.boxShadow = `0 0 18px ${glowColor}99`;
+  img.style.objectFit = "cover";
+  document.body.appendChild(img);
+
+  this._milestoneMedia = [vid, img];
+
+  // Auto-remove gif after 4 seconds
+  this.time.delayedCall(4000, () => this.removeMilestoneMedia());
+};
+
+GameScene.prototype.removeMilestoneMedia = function removeMilestoneMedia() {
+  if (this._milestoneMedia) {
+    this._milestoneMedia.forEach(el => el.remove());
+    this._milestoneMedia = [];
   }
 };
 

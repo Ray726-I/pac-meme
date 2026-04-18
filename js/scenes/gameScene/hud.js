@@ -12,8 +12,8 @@ GameScene.prototype.createHud = function createHud() {
   this.levelText = this.add.text(this.scale.width / 2 - 48, hudY, "", this.hudStyle).setDepth(6);
 
   this.livesIcons = [];
-  const livesStartX = this.boardOffsetX + this.gridWidth * this.tileSize - 120;
-  for (let i = 0; i < 3; i++) {
+  const livesStartX = this.boardOffsetX + this.gridWidth * this.tileSize - 200;
+  for (let i = 0; i < 5; i++) {
     const heart = this.add.image(livesStartX + i * 40, hudY + 13, "heart").setDepth(6);
     this.livesIcons.push(heart);
   }

@@ -64,10 +64,10 @@ class TitleScene extends Phaser.Scene {
 
     // Player
     const pSprite = this.add.sprite(150, 180, "player_idle").setDisplaySize(48, 48);
-    const pText = this.add.text(200, 180, "Eat pellets. Run from Memes.", {
+    const pText = this.add.text(200, 180, "Eat pellets. Loves Parle-G. Run from Memes.", {
       fontFamily: 'PacFont', fontSize: "16px", color: "#fff", wordWrap: { width: 500 }
     }).setOrigin(0, 0.5);
-    
+
     // Chin Tapak
     const cSprite = this.add.sprite(150, 260, "chin_tapak").setDisplaySize(48, 48);
     const cText = this.add.text(200, 260, "Teleports near you suddenly!", {
@@ -86,9 +86,15 @@ class TitleScene extends Phaser.Scene {
       fontFamily: 'PacFont', fontSize: "16px", color: "#fff"
     }).setOrigin(0, 0.5);
 
-    this.rulesContainer.add([pSprite, pText, cSprite, cText, mSprite, mText, aSprite, aText]);
+    // Mahi
+    const dSprite = this.add.sprite(150, 500, "mahi_hunter").setDisplaySize(48, 48);
+    const dText = this.add.text(200, 500, "Phases thru walls & throws cricket balls!", {
+      fontFamily: 'PacFont', fontSize: "16px", color: "#fff", wordWrap: { width: 500 }
+    }).setOrigin(0, 0.5);
 
-    const backBtn = this.add.text(cx, cy + 280, "Back", {
+    this.rulesContainer.add([pSprite, pText, cSprite, cText, mSprite, mText, aSprite, aText, dSprite, dText]);
+
+    const backBtn = this.add.text(cx, cy + 360, "Back", {
       fontFamily: 'PacFont',
       fontSize: "28px",
       color: "#f8fafc",

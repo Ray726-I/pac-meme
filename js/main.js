@@ -14,7 +14,7 @@ const config = {
       debug: false,
     },
   },
-  scene: [BootScene, TitleScene, StartScene, GameScene, GameOverScene, LevelClearedScene],
+  scene: [BootScene, TitleScene, StartScene, GameScene, GameOverScene, LevelClearedScene, GameWonScene],
 };
 
-new Phaser.Game(config);
+window.game = new Phaser.Game(config);

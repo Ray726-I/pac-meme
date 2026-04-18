@@ -49,6 +49,21 @@ GameScene.prototype.collectPelletAt = function collectPelletAt(cx, cy) {
   if (this.transitioning || this.gameOver) return;
 
   const key = `${cx},${cy}`;
+
+  // Check for parleg pickup first
+  const parleg = this.parlegByCell?.get(key);
+  if (parleg && parleg.active) {
+    parleg.destroy();
+    this.parlegByCell.delete(key);
+    this.sound.play("eat_audio");
+    if (this.lives < 5) {
+      this.lives += 1;
+      this.refreshHud();
+      this.showNotice("Parle-G! +1 ❤️");
+    }
+    return;
+  }
+
   const pellet = this.pelletByCell.get(key);
   if (!pellet || !pellet.active) return;
 
@@ -59,6 +74,12 @@ GameScene.prototype.collectPelletAt = function collectPelletAt(cx, cy) {
 
   if (this.score % 100 === 67) {
     this.triggerSixtySevenMeme();
+  }
+
+  if (this.score > 0 && this.score % 200 === 0) {
+    this.triggerScoreMilestone200();
+  } else if (this.score > 0 && this.score % 100 === 0) {
+    this.triggerScoreMilestone100();
   }
 
   if (this.pelletByCell.size === 0) {
@@ -138,7 +159,8 @@ GameScene.prototype.levelComplete = function levelComplete() {
   this.showNotice(`Level ${this.level} Cleared`);
 
   this.time.delayedCall(1200, () => {
-    this.scene.start("LevelClearedScene", {
+    const targetScene = this.level === 5 ? "GameWonScene" : "LevelClearedScene";
+    this.scene.start(targetScene, {
       level: this.level,
       score: this.score,
       highScore: this.highScore,
@@ -171,6 +193,7 @@ GameScene.prototype.stopAllAgents = function stopAllAgents() {
   this.clearFireProjectiles();
   this.clearCricketBalls();
   this.removeSixtySevenMeme();
+  this.removeMilestoneMedia();
 
   for (const h of this.hunters) {
     h.direction = { x: 0, y: 0 };
@@ -211,4 +234,5 @@ GameScene.prototype.shutdownGameScene = function shutdownGameScene() {
     this.stopHunterPhaseAudio(hunter);
   }
   this.removeSixtySevenMeme();
+  this.removeMilestoneMedia();
 };
