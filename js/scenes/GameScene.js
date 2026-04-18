@@ -90,14 +90,9 @@ class GameScene extends Phaser.Scene {
           cellY <= 0 || cellY >= this.gridHeight - 1) {
         return false;
       }
-      // Only phase through thin walls — the cell must touch at least
-      // one open cell so the hunter can't burrow deep into thick walls.
-      return (
-        (cellX + 1 < this.gridWidth  && this.levelLayout[cellY][cellX + 1] !== "#") ||
-        (cellX - 1 >= 0              && this.levelLayout[cellY][cellX - 1] !== "#") ||
-        (cellY + 1 < this.gridHeight && this.levelLayout[cellY + 1][cellX] !== "#") ||
-        (cellY - 1 >= 0              && this.levelLayout[cellY - 1][cellX] !== "#")
-      );
+      // Any interior wall is fair game — the safety teleport in
+      // triggerMahiPhasingSequence handles landing inside a wall.
+      return true;
     }
 
     return !isWall;

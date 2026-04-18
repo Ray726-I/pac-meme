@@ -124,8 +124,12 @@ GameScene.prototype.createActors = function createActors() {
       baseScaleX: sprite.scaleX,
       baseScaleY: sprite.scaleY,
       specialCooldown: (function () {
-        const base = spawn.type === "A" ? 2500 : (spawn.type === "D" ? 7000 : 20000);
-        return this.level === 5 ? base - 1000 : base;
+        if (this.level === 5) {
+          if (spawn.type === "D") return 6000;
+          if (spawn.type === "A") return 1500;
+          return 19000;
+        }
+        return spawn.type === "A" ? 2500 : (spawn.type === "D" ? 7000 : 20000);
       }).call(this),
     };
   });
@@ -152,10 +156,14 @@ GameScene.prototype.checkHunterContact = function checkHunterContact() {
 
 GameScene.prototype.checkSpecialTriggers = function checkSpecialTriggers(time) {
   if (this.transitioning || this.gameOver || this.invulnerable) return;
-  if ((time - this.lastAnySpecialAt) < this.minSpecialGapMs) return;
+
+  const globalGapReady = (time - this.lastAnySpecialAt) >= this.minSpecialGapMs;
 
   for (const hunter of this.hunters) {
     if (hunter.isSprinting || hunter.isTeleporting || hunter.isPhasing) continue;
+
+    // On Level 5 Mahi bypasses the global cooldown; everyone else must wait
+    if (!globalGapReady && !(this.level === 5 && hunter.type === "D")) continue;
 
     const dist = Phaser.Math.Distance.Between(
       hunter.sprite.x,
@@ -299,7 +307,7 @@ GameScene.prototype.triggerFireSequence = function triggerFireSequence(hunter, d
 
 GameScene.prototype.triggerMahiThrowSequence = function triggerMahiThrowSequence(hunter, direction, time) {
   hunter.lastSpecialTime = time;
-  this.lastAnySpecialAt = time;
+  if (this.level !== 5) this.lastAnySpecialAt = time;
   hunter.direction = { x: 0, y: 0 };
   hunter.moving = false;
   hunter.sprite.setPosition(this.gridToWorld(hunter.cellX), this.gridToWorldY(hunter.cellY));
@@ -322,7 +330,7 @@ GameScene.prototype.triggerMahiThrowSequence = function triggerMahiThrowSequence
 
 GameScene.prototype.triggerMahiPhasingSequence = function triggerMahiPhasingSequence(hunter, time) {
   hunter.lastSpecialTime = time;
-  this.lastAnySpecialAt = time;
+  if (this.level !== 5) this.lastAnySpecialAt = time;
   hunter.isPhasing = true;
   hunter.direction = { x: 0, y: 0 };
   hunter.moving = false;

@@ -156,7 +156,7 @@ GameScene.prototype.moveHunters = function moveHunters(delta, time) {
       if (hunter.isSprinting) {
         speed = 180;
       } else if (hunter.isPhasing) {
-        speed = Math.max(80, speed * 0.72);
+        speed = Math.max(140, speed * 1.25);
       }
       this.advanceAgent(hunter, delta, speed);
 
