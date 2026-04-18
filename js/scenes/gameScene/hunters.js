@@ -195,6 +195,9 @@ GameScene.prototype.createActors = function createActors() {
           if (spawn.type === "A") return 1500;
           return 19000;
         }
+        if (this.level === 2) {
+          if (spawn.type === "C") return 13000;
+        }
         if (this.level === 3) {
           if (spawn.type === "A") return 1800;
         }
