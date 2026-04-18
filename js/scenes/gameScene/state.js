@@ -55,6 +55,7 @@ GameScene.prototype.collectPelletAt = function collectPelletAt(cx, cy) {
   if (parleg && parleg.active) {
     parleg.destroy();
     this.parlegByCell.delete(key);
+    this.sound.play("eat_audio");
     if (this.lives < 5) {
       this.lives += 1;
       this.refreshHud();
