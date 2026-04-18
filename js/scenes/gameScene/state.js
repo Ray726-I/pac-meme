@@ -75,6 +75,12 @@ GameScene.prototype.collectPelletAt = function collectPelletAt(cx, cy) {
     this.triggerSixtySevenMeme();
   }
 
+  if (this.score > 0 && this.score % 200 === 0) {
+    this.triggerScoreMilestone200();
+  } else if (this.score > 0 && this.score % 100 === 0) {
+    this.triggerScoreMilestone100();
+  }
+
   if (this.pelletByCell.size === 0) {
     this.levelComplete();
   }
@@ -185,6 +191,7 @@ GameScene.prototype.stopAllAgents = function stopAllAgents() {
   this.clearFireProjectiles();
   this.clearCricketBalls();
   this.removeSixtySevenMeme();
+  this.removeMilestoneMedia();
 
   for (const h of this.hunters) {
     h.direction = { x: 0, y: 0 };
@@ -225,4 +232,5 @@ GameScene.prototype.shutdownGameScene = function shutdownGameScene() {
     this.stopHunterPhaseAudio(hunter);
   }
   this.removeSixtySevenMeme();
+  this.removeMilestoneMedia();
 };

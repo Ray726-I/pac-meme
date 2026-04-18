@@ -601,6 +601,125 @@ GameScene.prototype.removeSixtySevenMeme = function removeSixtySevenMeme() {
   }
 };
 
+// ─── Score milestone: multiples of 100 (not 200) ───────────────────────────
+
+GameScene.prototype.triggerScoreMilestone100 = function triggerScoreMilestone100() {
+  if (!this.scoreText) return;
+
+  const animText = this.add.text(this.scoreText.x, this.scoreText.y, `${this.score}!`, {
+    fontFamily: 'PacFont',
+    fontSize: "26px",
+    color: "#34d399"
+  }).setOrigin(0, 0).setDepth(20);
+
+  this.tweens.add({
+    targets: animText,
+    y: animText.y - 70,
+    scaleX: 2.8,
+    scaleY: 2.8,
+    duration: 1600,
+    ease: "Power2",
+    onUpdate: (tween) => {
+      if (tween.getValue() > 0.5) animText.setColor("#f59e0b");
+    },
+    onComplete: () => animText.destroy(),
+  });
+
+  this._spawnMilestoneMedia(
+    "assets/shabash-beta-100.mp4",   // right  (video)
+    "assets/rabbit-sticker-bunny-sticker.gif",  // left (gif)
+    "#34d399"
+  );
+};
+
+// ─── Score milestone: multiples of 200 ─────────────────────────────────────
+
+GameScene.prototype.triggerScoreMilestone200 = function triggerScoreMilestone200() {
+  if (!this.scoreText) return;
+
+  const animText = this.add.text(this.scoreText.x, this.scoreText.y, `${this.score}!!`, {
+    fontFamily: 'PacFont',
+    fontSize: "28px",
+    color: "#a78bfa"
+  }).setOrigin(0, 0).setDepth(20);
+
+  this.tweens.add({
+    targets: animText,
+    y: animText.y - 80,
+    scaleX: 3,
+    scaleY: 3,
+    duration: 1800,
+    ease: "Power2",
+    onUpdate: (tween) => {
+      if (tween.getValue() > 0.5) animText.setColor("#ec4899");
+    },
+    onComplete: () => animText.destroy(),
+  });
+
+  this._spawnMilestoneMedia(
+    "assets/clap-200.mp4",                          // right (video)
+    "assets/spongebob-squarepants-spongebob.gif",   // left  (gif)
+    "#a78bfa"
+  );
+};
+
+// ─── Shared DOM media spawner ───────────────────────────────────────────────
+
+GameScene.prototype._spawnMilestoneMedia = function _spawnMilestoneMedia(rightVideoSrc, leftGifSrc, glowColor) {
+  this.removeMilestoneMedia();
+
+  const canvas = this.sys.game.canvas;
+  const rect = canvas.getBoundingClientRect();
+
+  const mediaW = Math.round(rect.width * 0.30);
+  const mediaH = Math.round(mediaW * (9 / 16));
+  const cy = Math.round(rect.top + (rect.height - mediaH) / 2);
+
+  // Right side — video
+  const vid = document.createElement("video");
+  vid.src = rightVideoSrc;
+  vid.autoplay = true;
+  vid.muted = false;
+  vid.playsInline = true;
+  vid.style.position = "fixed";
+  vid.style.left = (rect.right + 5) + "px";
+  vid.style.top = cy + "px";
+  vid.style.width = mediaW + "px";
+  vid.style.height = mediaH + "px";
+  vid.style.zIndex = "9998";
+  vid.style.borderRadius = "8px";
+  vid.style.boxShadow = `0 0 18px ${glowColor}99`;
+  vid.style.objectFit = "cover";
+  vid.onended = () => { vid.remove(); this._milestoneMedia = this._milestoneMedia?.filter(el => el !== vid); };
+  document.body.appendChild(vid);
+
+  // Left side — gif image
+  const img = document.createElement("img");
+  img.src = leftGifSrc;
+  img.style.position = "fixed";
+  img.style.left = (rect.left - mediaW - 5) + "px";
+  img.style.top = cy + "px";
+  img.style.width = mediaW + "px";
+  img.style.height = mediaH + "px";
+  img.style.zIndex = "9998";
+  img.style.borderRadius = "8px";
+  img.style.boxShadow = `0 0 18px ${glowColor}99`;
+  img.style.objectFit = "cover";
+  document.body.appendChild(img);
+
+  this._milestoneMedia = [vid, img];
+
+  // Auto-remove gif after 4 seconds
+  this.time.delayedCall(4000, () => this.removeMilestoneMedia());
+};
+
+GameScene.prototype.removeMilestoneMedia = function removeMilestoneMedia() {
+  if (this._milestoneMedia) {
+    this._milestoneMedia.forEach(el => el.remove());
+    this._milestoneMedia = [];
+  }
+};
+
 /**
  * BFS outward from (cx, cy) to find the nearest non-wall cell.
  * Used as a safety net when a hunter ends phasing inside a wall.
